@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>naives — algorithmic doodle faces</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23efe9dd' stroke='%232b2723' stroke-width='2'/%3E%3Ccircle cx='11' cy='13' r='2.2' fill='%232b2723'/%3E%3Ccircle cx='21' cy='13' r='2.2' fill='%232b2723'/%3E%3Cpath d='M16 14v6' stroke='%232b2723' stroke-width='1.6' fill='none'/%3E%3Cpath d='M12 24h8' stroke='%232b2723' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper: #efe9dd;
+    --paper-dark: #e2dac9;
+    --ink: #2b2723;
+    --ink-soft: #6b6259;
+    --rule: #cfc5b4;
+    --accent: #a9603f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    display: grid;
+    grid-template-columns: 268px 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  header {
+    grid-column: 1 / -1;
+    display: flex; align-items: baseline; gap: 18px;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+  h1 {
+    font: 600 15px/1 ui-monospace, monospace;
+    letter-spacing: .38em; margin: 0; text-transform: uppercase;
+  }
+  .tagline { color: var(--ink-soft); font-size: 11px; letter-spacing: .04em; }
+  nav { margin-left: auto; display: flex; gap: 2px; }
+  nav button {
+    font: inherit; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    background: none; border: 1px solid transparent; color: var(--ink-soft);
+    padding: 5px 11px; cursor: pointer; border-radius: 2px;
+  }
+  nav button:hover { color: var(--ink); background: var(--paper-dark); }
+  nav button[aria-selected="true"] {
+    color: var(--paper); background: var(--ink); border-color: var(--ink);
+  }
+  nav button[aria-selected="true"]:hover { background: var(--ink); color: var(--paper); }
+
+  aside {
+    border-right: 1px solid var(--rule);
+    padding: 16px 18px 40px;
+    overflow-y: auto;
+  }
+  main {
+    display: grid; place-items: center; overflow: auto; padding: 24px;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,.5), transparent 60%),
+      var(--paper);
+  }
+  canvas { max-width: 100%; height: auto; cursor: grab; box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 12px 34px -18px rgba(40,30,20,.5); }
+  canvas.dragging { cursor: grabbing; }
+
+  fieldset { border: 0; padding: 0; margin: 0 0 18px; }
+  legend {
+    font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-soft); padding: 0 0 8px; border-bottom: 1px solid var(--rule);
+    width: 100%; margin-bottom: 10px;
+  }
+  label { display: block; margin-bottom: 9px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .row span { font-size: 11px; color: var(--ink-soft); }
+  .row output { font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; margin: 3px 0 0; accent-color: var(--ink); height: 16px; }
+  input[type=text], input[type=number], select {
+    font: inherit; font-size: 12px; width: 100%; padding: 4px 6px; margin-top: 3px;
+    background: rgba(255,255,255,.55); color: var(--ink);
+    border: 1px solid var(--rule); border-radius: 2px;
+  }
+  select { cursor: pointer; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  button.act {
+    font: inherit; font-size: 11px; letter-spacing: .06em;
+    padding: 6px 10px; cursor: pointer; border-radius: 2px;
+    background: var(--ink); color: var(--paper); border: 1px solid var(--ink);
+  }
+  button.act.ghost { background: none; color: var(--ink); }
+  button.act:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.act.ghost:hover { color: #fff; }
+  .hint { font-size: 10.5px; color: var(--ink-soft); line-height: 1.6; }
+  .desc {
+    font-size: 10.5px; color: var(--ink-soft); margin-top: 10px;
+    border-top: 1px dotted var(--rule); padding-top: 8px; word-break: break-word;
+  }
+  .checkline { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; font-size: 11.5px; }
+  .checkline input { accent-color: var(--ink); }
+  [hidden] { display: none !important; }
+  @media (max-width: 720px) {
+    /* Let the page scroll instead of forcing everything into one viewport --
+       a contact sheet wants to be tall. */
+    html, body { height: auto; }
+    body { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+    header {
+      position: sticky; top: 0; z-index: 5; background: var(--paper);
+      flex-wrap: wrap; gap: 10px; padding: 10px 14px;
+    }
+    .tagline { display: none; }
+    nav { margin-left: auto; }
+    nav button { padding: 8px 12px; font-size: 11px; }
+    /* Faces first, controls underneath -- nobody should have to scroll past a
+       screenful of sliders to see the drawing. */
+    header { order: 0; }
+    main { order: 1; padding: 12px; overflow: visible; min-height: 40vh; }
+    aside {
+      order: 2; border-right: 0; border-top: 1px solid var(--rule);
+      padding: 14px 14px 22px; overflow: visible;
+    }
+    canvas { width: 100% !important; height: auto !important; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Naives</h1>
+  <span class="tagline">algorithm complete, code freedom · faces drawn on an invisible 3D skull</span>
+  <nav id="tabs">
+    <button data-tab="plate" aria-selected="true">Plate</button>
+    <button data-tab="head" aria-selected="false">3D head</button>
+    <button data-tab="turn" aria-selected="false">Turntable</button>
+  </nav>
+</header>
+
+<aside>
+  <!-- shared -->
+  <fieldset>
+    <legend>Seed</legend>
+    <label><input type="text" id="seed" value="naives"></label>
+    <div class="btns">
+      <button class="act" id="reroll">Reroll</button>
+      <button class="act ghost" id="png">PNG</button>
+      <button class="act ghost" id="svg">SVG</button>
+    </div>
+  </fieldset>
+
+  <!-- plate -->
+  <fieldset data-for="plate">
+    <legend>Plate</legend>
+    <label class="row"><span>columns</span><output id="colsOut">6</output></label>
+    <input type="range" id="cols" min="2" max="10" value="6">
+    <label class="row"><span>rows</span><output id="rowsOut">8</output></label>
+    <input type="range" id="rows" min="1" max="12" value="8">
+    <label class="row"><span>turn ±°</span><output id="turnOut">0</output></label>
+    <input type="range" id="turn" min="0" max="70" value="0">
+    <label class="row"><span>tilt ±°</span><output id="tiltOut">0</output></label>
+    <input type="range" id="tilt" min="0" max="35" value="0">
+    <div class="checkline"><input type="checkbox" id="paper" checked><label for="paper" style="margin:0">paper grain</label></div>
+    <p class="hint">Click any face to open it in the 3D head.</p>
+  </fieldset>
+
+  <!-- head -->
+  <fieldset data-for="head turn">
+    <legend>Orientation</legend>
+    <label class="row"><span>yaw</span><output id="yawOut">0°</output></label>
+    <input type="range" id="yaw" min="-90" max="90" value="0">
+    <label class="row"><span>pitch</span><output id="pitchOut">0°</output></label>
+    <input type="range" id="pitch" min="-40" max="40" value="0">
+    <label class="row"><span>roll</span><output id="rollOut">0°</output></label>
+    <input type="range" id="roll" min="-30" max="30" value="0">
+    <div class="checkline"><input type="checkbox" id="spin"><label for="spin" style="margin:0">auto-spin</label></div>
+    <div class="checkline"><input type="checkbox" id="rig"><label for="rig" style="margin:0">show the skull</label></div>
+    <p class="hint">Drag the head to turn it.</p>
+  </fieldset>
+
+  <fieldset data-for="head">
+    <legend>Features</legend>
+    <div id="pickers"></div>
+  </fieldset>
+
+  <fieldset data-for="turn">
+    <legend>Turntable</legend>
+    <label class="row"><span>frames</span><output id="framesOut">10</output></label>
+    <input type="range" id="frames" min="2" max="24" value="10">
+    <label class="row"><span>sweep °</span><output id="sweepOut">160</output></label>
+    <input type="range" id="sweep" min="20" max="180" value="160">
+  </fieldset>
+
+  <div class="desc" id="desc"></div>
+</aside>
+
+<main><canvas id="stage"></canvas></main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

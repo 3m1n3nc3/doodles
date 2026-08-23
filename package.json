@@ -1,0 +1,51 @@
+{
+  "name": "naives",
+  "version": "0.1.0",
+  "description": "Algorithmic doodle faces. Every feature lives at a coordinate on an invisible 3D head, so you can turn it.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "generative",
+    "procedural",
+    "faces",
+    "doodle",
+    "svg",
+    "canvas",
+    "avatar",
+    "illustration"
+  ],
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./head": "./src/head.js",
+    "./pen": "./src/pen.js",
+    "./genome": "./src/genome.js",
+    "./svg": "./src/surfaces/svg.js",
+    "./canvas": "./src/surfaces/canvas2d.js",
+    "./features/*": "./src/features/*.js"
+  },
+  "bin": {
+    "naives": "./bin/naives.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "web",
+    "scripts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "plate": "node bin/naives.js plate -o out/plate.svg",
+    "face": "node bin/naives.js face -o out/face.svg",
+    "turn": "node bin/naives.js turn -o out/turn.svg",
+    "sheets": "node scripts/sheets.js",
+    "list": "node bin/naives.js list"
+  },
+  "dependencies": {}
+}
