@@ -3,9 +3,9 @@
  * out. Every cell is just renderFace with a different centre and seed.
  */
 
-import { renderFace } from './face.js';
-import { Rng } from './rng.js';
-import { PAPER } from './palette.js';
+import { renderFace } from './face.js'
+import { Rng } from './rng.js'
+import { PAPER } from './palette.js'
 
 export function renderPlate(surface, opts = {}) {
   const {
@@ -20,40 +20,41 @@ export function renderPlate(surface, opts = {}) {
     tilt = 0,               // max |pitch|
     lean = 0.05,            // max |roll|
     seedPrefix = null,
-  } = opts;
+  } = opts
 
-  const rng = new Rng(`${seed}~plate`);
-  if (paper) surface.background(opts.paperColor || rng.pick(PAPER));
+  const rng = new Rng(`${seed}~plate`)
+  if (paper) surface.background(opts.paperColor || rng.pick(PAPER))
   if (paper && surface.paperTexture) {
     surface.paperTexture(surface.constructor.name === 'SVGSurface'
       ? { opacity: 0.28, freq: 1.1 }
-      : { opacity: 0.05, scale: 1, rng: () => rng.next() });
+      : { opacity: 0.05, scale: 1, rng: () => rng.next() })
   }
 
-  const pad = margin ?? Math.min(surface.width, surface.height) * 0.05;
-  const cw = (surface.width - pad * 2) / cols;
-  const ch = (surface.height - pad * 2) / rows;
-  const cell = Math.min(cw, ch);
-  const faces = [];
+  const pad = margin ?? Math.min(surface.width, surface.height) * 0.05
+  const cw = (surface.width - pad * 2) / cols
+  const ch = (surface.height - pad * 2) / rows
+  const cell = Math.min(cw, ch)
+  const faces = []
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const i = row * cols + col;
-      const fseed = `${seedPrefix ?? seed}-${i}`;
-      const cx = pad + cw * (col + 0.5) + rng.gauss(0, cell * jitter * 0.25);
-      const cy = pad + ch * (row + 0.5) + rng.gauss(0, cell * jitter * 0.25);
-      const scale = cell * scaleFactor * rng.float(0.86, 1.12);
+      const i = row * cols + col
+      const fseed = `${seedPrefix ?? seed}-${i}`
+      const cx = pad + cw * (col + 0.5) + rng.gauss(0, cell * jitter * 0.25)
+      const cy = pad + ch * (row + 0.5) + rng.gauss(0, cell * jitter * 0.25)
+      const scale = cell * scaleFactor * rng.float(0.86, 1.12)
       const res = renderFace(surface, {
         cx, cy, scale, seed: fseed,
         yaw: turn ? rng.gauss(0, turn / 2) : 0,
         pitch: tilt ? rng.gauss(0, tilt / 2) : 0,
         roll: lean ? rng.gauss(0, lean / 2) : 0,
         rough: opts.rough ?? 1,
-      });
-      faces.push({ seed: fseed, cx, cy, scale, genome: res.genome });
+      })
+      faces.push({ seed: fseed, cx, cy, scale, genome: res.genome })
     }
   }
-  return faces;
+  
+return faces
 }
 
-export default renderPlate;
+export default renderPlate

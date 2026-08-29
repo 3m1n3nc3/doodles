@@ -11,7 +11,7 @@ nose keeps sticking out because it was never flat to begin with.
 
 Same code path draws a frontal 48-face plate and a head at 70°.
 
-```
+```txt
                  v (latitude)
                     ▲                    features live here, on the surface:
                  ___│___                   eye   (u = ±0.45, v = +0.10)
@@ -40,7 +40,7 @@ npm test
 
 - **Plate** — a grid of faces. Click any face to open it in 3D.
 - **3D head** — drag to turn it, or auto-spin. Pin individual features from the
-  dropdowns. Tick *show the skull* to see the invisible head, its latitude
+  dropdowns. Tick _show the skull_ to see the invisible head, its latitude
   rings, and a cross at every feature anchor with its outward normal.
 - **Turntable** — one genome rendered across a sweep of angles.
 
@@ -75,9 +75,12 @@ const genome = makeGenome('ada');
 //   eyes: { u, v, left: { type: 'slit', size }, right: {...} },
 //   nose: { type: 'blob', size, v }, hair: {...}, hat: {...}, ... }
 
-renderFace(svg, { genome, yaw: 0.6 });                 // reuse: same person, new angle
+renderFace(svg, { genome, yaw: 0.6 }); // reuse: same person, new angle
 renderFace(svg, { seed: 'ada', traits: { nose: 'hook', hair: 'mohawk' } });
-renderFace(svg, { seed: 'ada', traits: { eyes: { left: { type: 'spiral' } } } });
+renderFace(svg, {
+  seed: 'ada',
+  traits: { eyes: { left: { type: 'spiral' } } },
+});
 ```
 
 Overrides merge deeply and a bare string sets that category's `type`, so
@@ -92,14 +95,14 @@ the same paths: `naives face --nose hook --eyes.left.type spiral`.
 import { Head } from 'naives';
 const head = new Head({ rx: 1, ry: 1.15, rz: 0.9, scale: 100, yaw: 0.6 });
 
-const f = head.frame(0.45, 0.1);   // a drawing frame glued to the skull
-f.map(0, 0);                       // -> [x, y] in pixels
-f.map(0.1, 0, 0.2);                // 0.1 across the face, 0.2 out of it
-f.facing;                          // > 0 means this skin faces the viewer
+const f = head.frame(0.45, 0.1); // a drawing frame glued to the skull
+f.map(0, 0); // -> [x, y] in pixels
+f.map(0.1, 0, 0.2); // 0.1 across the face, 0.2 out of it
+f.facing; // > 0 means this skin faces the viewer
 
-head.silhouette();                 // the outline, as an exact occluding contour
-head.ring({ v: 0.45 });            // a latitude ring: hairlines, hatbands, straps
-head.cap({ v: 0.45 });             // everything above that line, bounded by the outline
+head.silhouette(); // the outline, as an exact occluding contour
+head.ring({ v: 0.45 }); // a latitude ring: hairlines, hatbands, straps
+head.cap({ v: 0.45 }); // everything above that line, bounded by the outline
 head.cap({ v: -0.3, below: true }); // ...and everything below it: beards, scarves
 ```
 
@@ -108,15 +111,15 @@ wrap correctly at any angle instead of sliding off.
 
 ## How it draws
 
-| module | job |
-| --- | --- |
-| `src/head.js` | the invisible head: anchors, silhouette, latitude rings, caps |
-| `src/pen.js` | the hand: resampling, wobble, double strokes, hatching, scribble |
-| `src/surfaces/` | output targets — `SVGSurface`, `Canvas2DSurface` (4 calls each) |
-| `src/genome.js` | seed → traits |
-| `src/face.js` | layer order, and the feature-space helpers |
-| `src/features/` | 132 variants across 11 categories |
-| `src/rig.js` | draw the invisible head, visibly |
+| module          | job                                                              |
+| --------------- | ---------------------------------------------------------------- |
+| `src/head.js`   | the invisible head: anchors, silhouette, latitude rings, caps    |
+| `src/pen.js`    | the hand: resampling, wobble, double strokes, hatching, scribble |
+| `src/surfaces/` | output targets — `SVGSurface`, `Canvas2DSurface` (4 calls each)  |
+| `src/genome.js` | seed → traits                                                    |
+| `src/face.js`   | layer order, and the feature-space helpers                       |
+| `src/features/` | 132 variants across 11 categories                                |
+| `src/rig.js`    | draw the invisible head, visibly                                 |
 
 Two details do most of the aesthetic work:
 
@@ -143,7 +146,7 @@ hat (11) · beard (11) · accessories (12) · marks (10) · backdrop (11)
 
 ## CLI
 
-```
+```txt
 naives face   [--seed s] [--yaw deg] [--pitch deg] [--roll deg] [--size px] [-o f.svg]
 naives plate  [--cols 6] [--rows 8] [--seed s] [--turn deg] [--tilt deg] [-o f.svg]
 naives turn   [--seed s] [--frames 12] [--sweep deg] [-o f.svg]
