@@ -19,7 +19,9 @@ export default defineConfig([
     dts: true,
     clean: true,
     // The framework wrappers import their host, never bundle it.
-    external: ['react', 'react/jsx-runtime', 'vue'],
+    deps: {
+      neverBundle: ['react', 'react/jsx-runtime', 'vue'],
+    }
   },
   {
     entry: ['bin/naives.ts'],
