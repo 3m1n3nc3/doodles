@@ -4,13 +4,29 @@
  * pom-pom sits on the crown from any angle.
  */
 
-// import { oval, arc, curve, loops } from '../shapes.js'
+import type { FeatureContext, HatGenome, Point2, Vec3, Weighted } from '../types'
+
+export type HatFn = (c: FeatureContext, g: HatGenome) => void
+
+interface Band {
+  poly: Point2[]
+  lower: Point2[]
+  upper: Point2[]
+}
+
+interface BandOptions {
+  v0: number
+  v1: number
+  grow?: number
+  axis?: Vec3
+  segments?: number
+}
 
 /** A filled band between two latitudes -- brims, headbands, bandanas. */
-function band(c, { v0, v1, grow = 0.03, axis = [0, 1, 0], segments = 72 }) {
+function band(c: FeatureContext, { v0, v1, grow = 0.03, axis = [0, 1, 0], segments = 72 }: BandOptions): Band | null {
   const lo = c.head.ring({ v: v0, grow, axis, segments })
   const hi = c.head.ring({ v: v1, grow, axis, segments })
-  const vis = []
+  const vis: number[] = []
   for (let i = 0; i < lo.length; i++) if (lo[i].facing > 0.01 || hi[i].facing > 0.01) vis.push(i)
   if (vis.length < 3) return null
   // Contiguous forward-facing run, in order.
@@ -25,7 +41,7 @@ function band(c, { v0, v1, grow = 0.03, axis = [0, 1, 0], segments = 72 }) {
   return { poly: lower.concat(upper.reverse()), lower, upper: ord.map((i) => hi[i].p) }
 }
 
-export const hats = {
+export const hats: Record<string, HatFn> = {
   none() { },
 
   beanie(c, g) {
@@ -145,24 +161,24 @@ export const hats = {
   crown(c, g) {
     const b = band(c, { v0: g.v + 0.05, v1: g.v + 0.22, grow: 0.05 })
     if (!b) return
-    const spikes = []
+    const spikes: Point2[] = []
     const up = b.upper
     for (let i = 0; i < up.length - 1; i += 3) {
       spikes.push(up[i])
-      const mid = [(up[i][0] + up[Math.min(i + 2, up.length - 1)][0]) / 2, up[i][1] - c.px * 0.1]
+      const mid: Point2 = [(up[i][0] + up[Math.min(i + 2, up.length - 1)][0]) / 2, up[i][1] - c.px * 0.1]
       spikes.push(mid)
     }
     c.pen.stroke(b.lower.concat(spikes.reverse()), { closed: true, color: c.pal.ink, weight: 0.8, fill: g.color })
   },
 }
 
-export const HAT_WEIGHTS = [
+export const HAT_WEIGHTS: Weighted<string> = [
   ['none', 30], ['headband', 12], ['beanie', 9], ['pom', 5], ['bandana', 5],
   ['flatCap', 5], ['cone', 1.6], ['bucket', 3], ['halo', 2], ['horns', 1.5],
   ['crown', 1],
 ]
 
-export function drawHat(c) {
+export function drawHat(c: FeatureContext): void {
   const g = c.g.hat;
   (hats[g.type] || hats.none)(c, g)
 }

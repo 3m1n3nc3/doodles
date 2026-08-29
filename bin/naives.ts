@@ -10,19 +10,27 @@
  *   naives genome --seed bob
  */
 
-import { describe, makeGenome } from '../src/genome.js'
+import { describe, makeGenome } from '../src/genome'
 import { dirname, resolve } from 'node:path'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
-import { PAPER } from '../src/palette.js'
-import { Rng } from '../src/rng.js'
-import { SVGSurface } from '../src/surfaces/svg.js'
-import { catalogue } from '../src/index.js'
-import { renderFace } from '../src/face.js'
-import { renderPlate } from '../src/plate.js'
+import { PAPER } from '../src/palette'
+import { Rng } from '../src/rng'
+import { SVGSurface } from '../src/surfaces/svg'
+import { catalogue } from '../src/index'
+import { renderFace } from '../src/face'
+import { renderPlate } from '../src/plate'
 
-function parseArgs(argv) {
-  const out = { _: [] }
+import type { Overrides } from '../src/types'
+
+/** Parsed flags. `_` holds the positional arguments. */
+interface Args {
+  _: string[]
+  [flag: string]: string | boolean | string[]
+}
+
+function parseArgs(argv: string[]): Args {
+  const out: Args = { _: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a.startsWith('--')) {
@@ -38,10 +46,13 @@ function parseArgs(argv) {
   return out
 }
 
-const num = (v, d) => (v === undefined ? d : Number(v))
-const deg = (v, d) => (num(v, d) * Math.PI) / 180
+type Flag = string | boolean | string[] | undefined
 
-function save(path, text) {
+const num = (v: Flag, d: number): number => (v === undefined ? d : Number(v))
+const deg = (v: Flag, d: number): number => (num(v, d) * Math.PI) / 180
+const str = (v: Flag, d: string): string => (typeof v === 'string' ? v : d)
+
+function save(path: string, text: string): void {
   const p = resolve(path)
   mkdirSync(dirname(p), { recursive: true })
   writeFileSync(p, text)
@@ -51,7 +62,7 @@ function save(path, text) {
 
 const args = parseArgs(process.argv.slice(2))
 const cmd = args._[0] || 'plate'
-const out = args.o || args.out
+const out = (args.o ?? args.out) as string | undefined
 
 if (args.help || args.h || cmd === 'help') {
   console.log(`naives -- algorithmic doodle faces
@@ -72,13 +83,13 @@ if (args.help || args.h || cmd === 'help') {
 const KNOWN = new Set(['seed', 'yaw', 'pitch', 'roll', 'size', 'width', 'height', 'cols', 'rows',
   'turn', 'tilt', 'lean', 'frames', 'sweep', 'o', 'out', 'category', 'json', 'paper', 'scale',
   'rough', 'jitter', 'bg', '_'])
-const traits = {}
+const traits: Overrides = {}
 for (const [k, v] of Object.entries(args)) {
   if (KNOWN.has(k)) continue
   const path = k.split('.')
   let node = traits
   while (path.length > 1) {
-    const p = path.shift()
+    const p = path.shift()!
     node[p] = node[p] || {}
     node = node[p]
   }
@@ -91,10 +102,10 @@ for (const [k, v] of Object.entries(args)) {
 if (cmd === 'face') {
   const size = num(args.size, 440)
   const s = new SVGSurface({ width: size, height: Math.round(size * 1.2) })
-  s.background(args.bg || PAPER[0])
+  s.background(str(args.bg, PAPER[0]))
   s.paperTexture({ opacity: 0.25 })
   const { genome } = renderFace(s, {
-    seed: args.seed ?? 'naive',
+    seed: str(args.seed, 'naive'),
     scale: size * 0.3,
     yaw: deg(args.yaw, 0), pitch: deg(args.pitch, 0), roll: deg(args.roll, 0),
     rough: num(args.rough, 1),
@@ -110,7 +121,7 @@ if (cmd === 'face') {
   const s = new SVGSurface({ width, height })
   renderPlate(s, {
     cols, rows,
-    seed: args.seed ?? 'plate',
+    seed: str(args.seed, 'plate'),
     turn: deg(args.turn, 0), tilt: deg(args.tilt, 0), lean: deg(args.lean, 3),
     scaleFactor: num(args.scale, 0.3),
     rough: num(args.rough, 1),
@@ -127,7 +138,7 @@ if (cmd === 'face') {
   const s = new SVGSurface({ width: cell * cols, height: cell * rows })
   s.background(PAPER[1])
   s.paperTexture({ opacity: 0.25 })
-  const g = makeGenome(args.seed ?? 'naive', traits)
+  const g = makeGenome(str(args.seed, 'naive'), traits)
   for (let i = 0; i < frames; i++) {
     const t = frames === 1 ? 0 : i / (frames - 1)
     renderFace(s, {
@@ -145,7 +156,7 @@ if (cmd === 'face') {
   console.log(describe(g))
 } else if (cmd === 'sheet') {
   // Every variant of one category, side by side, everything else held still.
-  const cat = args.category || 'eyes'
+  const cat = str(args.category, 'eyes')
   const all = await catalogue()
   const list = all[cat]
   if (!list) {
@@ -159,7 +170,7 @@ if (cmd === 'face') {
   s.paperTexture({ opacity: 0.22 })
   const rng = new Rng('sheet')
   list.forEach((name, i) => {
-    const t = { ...traits }
+    const t: Overrides = { ...traits }
     if (cat === 'eyes') t.eyes = { left: { type: name, size: 0.16 }, right: { type: name, size: 0.16 } }
     else if (cat === 'accessories') t.accessories = [{ type: name, ...defaultsFor(name, rng) }]
     else if (cat === 'marks') t.marks = [{ type: name, count: 6, color: '#c98f8f', style: 'wash', u: 0.7, v: 0 }]
@@ -176,7 +187,7 @@ if (cmd === 'face') {
   save(out || `sheet-${cat}.svg`, s.toString())
   console.log(`${list.length} variants: ${list.join(', ')}`)
 } else if (cmd === 'genome') {
-  const g = makeGenome(args.seed ?? 'naive', traits)
+  const g = makeGenome(str(args.seed, 'naive'), traits)
   if (args.json) console.log(JSON.stringify(g, (k, v) => (typeof v === 'function' ? '<fn>' : v), 2))
   else console.log(describe(g))
 } else if (cmd === 'list') {
@@ -192,7 +203,8 @@ if (cmd === 'face') {
   process.exit(1)
 }
 
-function defaultsFor() {
+/** One plausible set of knobs, so a contact sheet shows every accessory. */
+function defaultsFor(_name: string, _rng: Rng) {
   const d = { size: 0.2, color: '#2b2723', weight: 1, shape: 'round', side: 1, u: 0.9, v: 0.6, buttons: true }
 
   return d

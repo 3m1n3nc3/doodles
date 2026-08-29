@@ -4,9 +4,13 @@
  * plates are full of faces with one saucer and one pinhole.
  */
 
-import { arc, curve, spiral } from '../shapes.js'
+import type { EyeSpec, FeatureContext, Frame, Weighted } from '../types'
+import { arc, curve, spiral } from '../shapes'
 
-export const eyes = {
+/** Every eye is drawn in its own frame, at a radius `s`. */
+export type EyeFn = (c: FeatureContext, f: Frame, s: number) => void
+
+export const eyes: Record<string, EyeFn> = {
   dot(c, f, s) {
     c.dot(f, 0, 0, s * 0.52)
   },
@@ -106,17 +110,17 @@ export const eyes = {
 export const EYE_TYPES = Object.keys(eyes)
 
 /** Weighted so the plate stays readable but still surprises. */
-export const EYE_WEIGHTS = [
+export const EYE_WEIGHTS: Weighted<string> = [
   ['ring', 12], ['dot', 9], ['saucer', 7], ['almond', 6], ['bead', 6],
   ['pinhole', 5], ['blank', 4], ['sleepy', 4], ['hooded', 4], ['slit', 4],
   ['wink', 3], ['lashes', 3], ['bulge', 3], ['spiral', 2], ['cross', 1.2],
   ['boxy', 1.5], ['spectacleEye', 2],
 ]
 
-export function drawEyes(c) {
+export function drawEyes(c: FeatureContext): void {
   const g = c.g.eyes
   for (const side of [-1, 1]) {
-    const spec = side < 0 ? g.left : g.right
+    const spec: EyeSpec = side < 0 ? g.left : g.right
     const u = (g.u + g.skewU) * side
     const v = g.v + side * g.skewV
     const f = c.head.frame(u, v)

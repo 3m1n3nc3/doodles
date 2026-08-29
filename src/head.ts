@@ -11,18 +11,42 @@
  * poking out along the surface normal because it was never flat to begin with.
  */
 
+import type {
+  Bounds,
+  Cap,
+  Frame,
+  HeadOptions,
+  Lobe,
+  Mat3,
+  Point2,
+  Projection,
+  Pt,
+  RingOptions,
+  RingPoint,
+  Silhouette,
+  Vec3,
+  Wobble,
+} from './types'
 import {
-  dot, cross, norm3, matApply, matMul, rotX, rotY, rotZ, basisFor,
-} from './vec.js'
+  basisFor,
+  cross,
+  dot,
+  matApply,
+  matMul,
+  norm3,
+  rotX,
+  rotY,
+  rotZ,
+} from './vec'
 
-const UP = [0, 1, 0]
+const UP: Vec3 = [0, 1, 0]
 
 /** Longest contiguous run of true in a circular flag array. */
-function longestRun(flags) {
+function longestRun(flags: boolean[]): number[] {
   const n = flags.length
   if (!flags.some(Boolean)) return []
   if (flags.every(Boolean)) return flags.map((_, i) => i)
-  let best = [], run = []
+  let best: number[] = [], run: number[] = []
   for (let k = 0; k < n * 2; k++) {
     const i = k % n
     if (flags[i]) {
@@ -32,12 +56,27 @@ function longestRun(flags) {
       run = []
     }
   }
-  
-return best
+
+  return best
 }
 
 export class Head {
-  constructor(opts = {}) {
+  rx: number
+  ry: number
+  rz: number
+  lobes: Lobe[]
+  wobble: Wobble[]
+  cx: number
+  cy: number
+  scale: number
+  focal: number
+  yaw = 0
+  pitch = 0
+  roll = 0
+  R: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  private _cache: Map<string, Silhouette>
+
+  constructor(opts: HeadOptions = {}) {
     this.rx = opts.rx ?? 1          // half-width
     this.ry = opts.ry ?? 1.12       // half-height
     this.rz = opts.rz ?? 0.9        // half-depth
@@ -51,42 +90,42 @@ export class Head {
     this.orient(opts.yaw ?? 0, opts.pitch ?? 0, opts.roll ?? 0)
   }
 
-  orient(yaw = 0, pitch = 0, roll = 0) {
+  orient(yaw = 0, pitch = 0, roll = 0): this {
     this.yaw = yaw
     this.pitch = pitch
     this.roll = roll
     this.R = matMul(rotZ(roll), matMul(rotX(pitch), rotY(yaw)))
     this._cache.clear()
-    
-return this
+
+    return this
   }
 
   // ---------------------------------------------------------------- geometry
 
   /** Unit sphere direction for a longitude/latitude pair. */
-  dir(u, v) {
+  dir(u: number, v: number): Vec3 {
     const cv = Math.cos(v)
-    
-return [cv * Math.sin(u), Math.sin(v), cv * Math.cos(u)]
+
+    return [cv * Math.sin(u), Math.sin(v), cv * Math.cos(u)]
   }
 
   /** Radial multiplier from the lobes: this is what makes skulls pear-shaped. */
-  bulge(d) {
+  bulge(d: Vec3): number {
     let r = 1
     for (const l of this.lobes) {
       const t = dot(d, l.dir)
       if (t > 0) r += l.amp * Math.pow(t, l.power)
     }
-    
-return r
+
+    return r
   }
 
   /** Smooth low-frequency drift, keyed to the *skull* so it rotates with it. */
-  drift(d) {
+  drift(d: Vec3): number {
     let w = 0
     for (const t of this.wobble) w += t.amp * Math.sin(t.freq * dot(d, t.dir) * Math.PI + t.phase)
-    
-return w
+
+    return w
   }
 
   /**
@@ -94,27 +133,27 @@ return w
    * The drift is folded in here, not painted on the outline afterwards --
    * otherwise the ears end up floating half an inch off the head.
    */
-  local(d, lift = 0, grow = 0) {
+  local(d: Vec3, lift = 0, grow = 0): Vec3 {
     const r = this.bulge(d) + this.drift(d) + grow
-    const p = [d[0] * this.rx * r, d[1] * this.ry * r, d[2] * this.rz * r]
+    const p: Vec3 = [d[0] * this.rx * r, d[1] * this.ry * r, d[2] * this.rz * r]
     if (lift) {
       const n = this.normal(d)
       p[0] += n[0] * lift; p[1] += n[1] * lift; p[2] += n[2] * lift
     }
-    
-return p
+
+    return p
   }
 
-  normal(d) {
+  normal(d: Vec3): Vec3 {
     return norm3([d[0] / this.rx, d[1] / this.ry, d[2] / this.rz])
   }
 
   /** Local point -> screen, with a gentle perspective divide. */
-  project(p) {
+  project(p: Vec3): Projection {
     const P = matApply(this.R, p)
     const s = this.focal / Math.max(0.25, this.focal - P[2])
-    
-return {
+
+    return {
       x: this.cx + P[0] * s * this.scale,
       y: this.cy - P[1] * s * this.scale,
       z: P[2],
@@ -131,7 +170,7 @@ return {
    * b down the face, c out of the face -- and returns screen pixels. Draw a
    * feature once in that space and it behaves correctly from every angle.
    */
-  frame(u, v, lift = 0) {
+  frame(u: number, v: number, lift = 0): Frame {
     const d = this.dir(u, v)
     const pr = this.project(this.local(d, lift))
 
@@ -147,19 +186,19 @@ return {
     const Nrm = matApply(this.R, this.normal(d))
 
     const k = this.scale * pr.s
-    const o = [pr.x, pr.y]
-    const ex = [E[0] * k, -E[1] * k]        // feature +x  (across, to screen right)
-    const ey = [-N[0] * k, N[1] * k]        // feature +y  (down the face)
-    const ez = [Nrm[0] * k, -Nrm[1] * k]    // feature +z  (out of the skin)
+    const o: Point2 = [pr.x, pr.y]
+    const ex: Point2 = [E[0] * k, -E[1] * k]        // feature +x  (across, to screen right)
+    const ey: Point2 = [-N[0] * k, N[1] * k]        // feature +y  (down the face)
+    const ez: Point2 = [Nrm[0] * k, -Nrm[1] * k]    // feature +z  (out of the skin)
 
-    const map = (a, b, c = 0) => [
+    const map = (a: number, b: number, c = 0): Point2 => [
       o[0] + a * ex[0] + b * ey[0] + c * ez[0],
       o[1] + a * ex[1] + b * ey[1] + c * ez[1],
     ]
 
     return {
       u, v, o, ex, ey, ez, map,
-      poly: (pts) => pts.map((p) => map(p[0], p[1], p[2] || 0)),
+      poly: (pts: Pt[]) => pts.map((p) => map(p[0], p[1], p[2] || 0)),
       facing: Nrm[2],          // >0 means this patch of skin faces the viewer
       depth: pr.z,
       scale: k,
@@ -179,19 +218,20 @@ return {
    * skull direction produced it, the hand-drawn wobble stays welded to the
    * skull instead of swimming across the screen as the head turns.
    */
-  silhouette(segments = 108, grow = 0) {
+  silhouette(segments = 108, grow = 0): Silhouette {
     const key = `s${segments}:${grow}`
-    if (this._cache.has(key)) return this._cache.get(key)
+    const hit = this._cache.get(key)
+    if (hit) return hit
 
     const S = [this.rx, this.ry, this.rz]
     const R = this.R
     // B = R * diag(S); rows 0 and 1 are what reaches the screen.
-    const row0 = [R[0] * S[0], R[1] * S[1], R[2] * S[2]]
-    const row1 = [R[3] * S[0], R[4] * S[1], R[5] * S[2]]
+    const row0: Vec3 = [R[0] * S[0], R[1] * S[1], R[2] * S[2]]
+    const row1: Vec3 = [R[3] * S[0], R[4] * S[1], R[5] * S[2]]
     const nullDir = norm3(cross(row0, row1))
     const [t1, t2] = basisFor(nullDir)
 
-    const pts = [], dirs = []
+    const pts: Pt[] = [], dirs: Vec3[] = []
     for (let i = 0; i < segments; i++) {
       const a = (i / segments) * Math.PI * 2
       const ca = Math.cos(a), sa = Math.sin(a)
@@ -212,31 +252,31 @@ return {
       area += a[0] * b[1] - b[0] * a[1]
     }
     if (area < 0) {
- pts.reverse(); dirs.reverse() 
-}
+      pts.reverse(); dirs.reverse()
+    }
 
     let cxs = 0, cys = 0
     for (const p of pts) {
- cxs += p[0]; cys += p[1] 
-}
+      cxs += p[0]; cys += p[1]
+    }
     cxs /= pts.length; cys /= pts.length
 
-    const res = { pts, dirs, center: [cxs, cys], segments }
+    const res: Silhouette = { pts, dirs, center: [cxs, cys], segments }
     this._cache.set(key, res)
-    
-return res
+
+    return res
   }
 
   /** Screen-space bounding box of the outline. */
-  bounds(grow = 0) {
+  bounds(grow = 0): Bounds {
     const { pts } = this.silhouette(72, grow)
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
     for (const [x, y] of pts) {
       if (x < x0) x0 = x; if (x > x1) x1 = x
       if (y < y0) y0 = y; if (y > y1) y1 = y
     }
-    
-return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 }
+
+    return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 }
   }
 
   // --------------------------------------------------------------- lat rings
@@ -246,10 +286,10 @@ return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 }
    * strap. Only the forward-facing part is real; the rest is behind the head.
    * `vAt(theta)` lets a hairline dip and peak instead of running dead level.
    */
-  ring({ v = 0.4, axis = UP, grow = 0, lift = 0, segments = 72, vAt = null }) {
+  ring({ v = 0.4, axis = UP, grow = 0, lift = 0, segments = 72, vAt = null }: RingOptions): RingPoint[] {
     const a = norm3(axis)
     const [t1, t2] = basisFor(a)
-    const out = []
+    const out: RingPoint[] = []
     for (let i = 0; i < segments; i++) {
       const th = (i / segments) * Math.PI * 2
       const vv = vAt ? vAt(th, v) : v
@@ -265,8 +305,8 @@ return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 }
       const n = matApply(this.R, this.normal(d))
       out.push({ d, p: [pr.x, pr.y], facing: n[2], theta: th, z: pr.z })
     }
-    
-return out
+
+    return out
   }
 
   /**
@@ -275,7 +315,7 @@ return out
    * masks get built -- front edge from the visible arc of the ring, back edge
    * from the silhouette -- so they wrap the head correctly at any angle.
    */
-  cap(opts = {}) {
+  cap(opts: RingOptions = {}): Cap {
     const { axis = UP, grow = 0, below = false, segments = 84 } = opts
     const a = norm3(axis)
     // `v` is signed: negative is below the equator. `below` only says which
@@ -283,7 +323,7 @@ return out
     const v = opts.v ?? 0.4
     const ring = this.ring({ ...opts, v, axis: a, grow, segments })
     const visible = longestRun(ring.map((r) => r.facing > 0.015))
-    const edge = visible.map((i) => ring[i].p)
+    const edge: Pt[] = visible.map((i) => ring[i].p)
     const dirs = visible.map((i) => ring[i].d)
     if (opts.edgeOnly) return { edge, dirs, ring, visible, edgeLen: edge.length, crown: [], poly: edge }
 
@@ -294,47 +334,47 @@ return out
         : dot(d, a) > Math.sin(v)))
       const idx = longestRun(keep)
       const crown = idx.length > 2 ? idx.map((i) => sil.pts[i]) : sil.pts
-      
-return { edge, dirs, ring, visible, edgeLen: edge.length, crown, poly: crown }
+
+      return { edge, dirs, ring, visible, edgeLen: edge.length, crown, poly: crown }
     }
 
     // Walk the outline from the end of the hairline back to its start, taking
     // whichever way round goes over the crown (or under the chin).
-    const nearest = (q) => {
+    const nearest = (q: Pt) => {
       let best = 0, bd = Infinity
       for (let i = 0; i < sil.pts.length; i++) {
         const d2 = (sil.pts[i][0] - q[0]) ** 2 + (sil.pts[i][1] - q[1]) ** 2
         if (d2 < bd) {
- bd = d2; best = i 
-}
+          bd = d2; best = i
+        }
       }
-      
-return best
+
+      return best
     }
     const i0 = nearest(edge[0])
     const i1 = nearest(edge[edge.length - 1])
     const n = sil.pts.length
-    const walk = (from, to) => {
-      const idx = []
+    const walk = (from: number, to: number) => {
+      const idx: number[] = []
       for (let k = 0; k <= n; k++) {
         const i = (from + k) % n
         idx.push(i)
         if (i === to) break
       }
-      
-return idx
+
+      return idx
     }
     const A = walk(i1, i0), B = walk(i0, i1).slice().reverse()
-    const score = (idx) => idx.reduce((acc, i) => acc + dot(sil.dirs[i], a), 0) / (idx.length || 1)
+    const score = (idx: number[]) => idx.reduce((acc, i) => acc + dot(sil.dirs[i], a), 0) / (idx.length || 1)
     const pick = (below ? score(A) < score(B) : score(A) > score(B)) ? A : B
 
     const crown = pick.map((i) => sil.pts[i])
-    
-return { edge, dirs, ring, visible, edgeLen: edge.length, crown, poly: edge.concat(crown) }
+
+    return { edge, dirs, ring, visible, edgeLen: edge.length, crown, poly: edge.concat(crown) }
   }
 
   /** Convenience: is a feature at (u,v) worth drawing at all? */
-  visibleAt(u, v, threshold = 0.02) {
+  visibleAt(u: number, v: number, threshold = 0.02): boolean {
     return this.frame(u, v).facing > threshold
   }
 }

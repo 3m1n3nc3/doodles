@@ -1,8 +1,12 @@
 /** The small marks that turn a face into a person: blush, freckles, worry. */
 
-import { arc, oval } from '../shapes.js'
+import { arc, oval } from '../shapes'
 
-export const marks = {
+import type { FeatureContext, MarkGenome, Weighted } from '../types'
+
+export type MarkFn = (c: FeatureContext, m: MarkGenome) => void
+
+export const marks: Record<string, MarkFn> = {
   blush(c, m) {
     for (const side of [-1, 1]) {
       const f = c.head.frame(0.78 * side, -0.18)
@@ -17,10 +21,11 @@ export const marks = {
   },
 
   freckles(c, m) {
+    const count = m.count ?? 6
     for (const side of [-1, 1]) {
       const f = c.head.frame(0.62 * side, -0.05)
       if (f.facing < 0.06) continue
-      for (let i = 0; i < m.count; i++) {
+      for (let i = 0; i < count; i++) {
         const p = f.map(c.rng.float(-0.22, 0.22), c.rng.float(-0.14, 0.14))
         c.pen.dot(p[0], p[1], c.px * c.rng.float(0.008, 0.016), { color: m.color, alpha: 0.8 })
       }
@@ -28,7 +33,7 @@ export const marks = {
   },
 
   mole(c, m) {
-    const f = c.head.frame(m.u, m.v)
+    const f = c.head.frame(m.u ?? 0.6, m.v ?? 0)
     if (f.facing < 0.05) return
     c.pen.dot(...f.map(0, 0), c.px * 0.022, { color: c.pal.ink })
   },
@@ -45,9 +50,10 @@ export const marks = {
   },
 
   wrinkles(c, m) {
+    const count = m.count ?? 2
     const f = c.head.frame(0, 0.62)
     if (f.facing < 0.1) return
-    for (let i = 0; i < m.count; i++) {
+    for (let i = 0; i < count; i++) {
       c.pen.stroke(f.poly(arc(0, i * 0.11, 0.42, 0.1, Math.PI + 0.4, Math.PI * 2 - 0.4, 0, 8)),
         { color: c.pal.ink, weight: 0.45, passes: 1, alpha: 0.55 })
     }
@@ -63,7 +69,7 @@ export const marks = {
   },
 
   scar(c, m) {
-    const f = c.head.frame(m.u, m.v)
+    const f = c.head.frame(m.u ?? 0.6, m.v ?? 0)
     if (f.facing < 0.06) return
     c.pen.stroke(f.poly([[-0.13, -0.13], [0.13, 0.13]]), { color: c.pal.ink, weight: 0.6, passes: 1 })
     c.pen.stroke(f.poly([[0.13, -0.13], [-0.13, 0.13]]), { color: c.pal.ink, weight: 0.6, passes: 1 })
@@ -95,12 +101,12 @@ export const marks = {
   },
 }
 
-export const MARK_WEIGHTS = [
+export const MARK_WEIGHTS: Weighted<string> = [
   ['blush', 14], ['freckles', 6], ['mole', 5], ['cheekLines', 5], ['wrinkles', 5],
   ['dimples', 4], ['scar', 2], ['whiskers', 2], ['noseShade', 1.5], ['chinCrease', 3],
 ]
 
-export function drawMarks(c) {
+export function drawMarks(c: FeatureContext): void {
   for (const m of c.g.marks) {
     const fn = marks[m.type]
     if (fn) fn(c, m)

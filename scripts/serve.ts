@@ -7,7 +7,7 @@ import { extname, join, normalize, resolve } from 'node:path'
 
 const root = resolve(process.argv[2] || process.cwd())
 const port = Number(process.env.PORT || 5173)
-const TYPES = {
+const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png',
@@ -16,11 +16,11 @@ const TYPES = {
 
 createServer(async (req, res) => {
   try {
-    let p = decodeURIComponent(new URL(req.url, 'http://x').pathname)
+    const p = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)
     if (p === '/' && !existsSync(join(root, 'index.html'))) {
       res.writeHead(302, { location: '/web/' })   // keep relative imports resolving
       res.end()
-      
+
 return
     }
     let file = join(root, normalize(p).replace(/^(\.\.[/\\])+/, ''))

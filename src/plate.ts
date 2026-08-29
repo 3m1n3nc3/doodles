@@ -3,11 +3,43 @@
  * out. Every cell is just renderFace with a different centre and seed.
  */
 
-import { renderFace } from './face.js'
-import { Rng } from './rng.js'
-import { PAPER } from './palette.js'
+import { PAPER } from './palette'
 
-export function renderPlate(surface, opts = {}) {
+import type { Genome, Overrides, Surface } from './types'
+import type { Seed } from './rng'
+
+export interface RenderPlateOptions {
+  cols?: number
+  rows?: number
+  seed?: Seed
+  margin?: number | null
+  paper?: boolean
+  paperColor?: string
+  scaleFactor?: number
+  /** How much each face wanders in its cell. */
+  jitter?: number
+  /** Max |yaw| in radians; 0 keeps the plate frontal. */
+  turn?: number
+  /** Max |pitch|. */
+  tilt?: number
+  /** Max |roll|. */
+  lean?: number
+  seedPrefix?: string | null
+  rough?: number
+  traits?: Overrides
+}
+
+export interface PlateCell {
+  seed: string
+  cx: number
+  cy: number
+  scale: number
+  genome: Genome
+}
+import { Rng } from './rng'
+import { renderFace } from './face'
+
+export function renderPlate(surface: Surface, opts: RenderPlateOptions = {}): PlateCell[] {
   const {
     cols = 6,
     rows = 8,
@@ -34,7 +66,7 @@ export function renderPlate(surface, opts = {}) {
   const cw = (surface.width - pad * 2) / cols
   const ch = (surface.height - pad * 2) / rows
   const cell = Math.min(cw, ch)
-  const faces = []
+  const faces: PlateCell[] = []
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -53,8 +85,8 @@ export function renderPlate(surface, opts = {}) {
       faces.push({ seed: fseed, cx, cy, scale, genome: res.genome })
     }
   }
-  
-return faces
+
+  return faces
 }
 
 export default renderPlate

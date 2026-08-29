@@ -27,12 +27,19 @@ Same code path draws a frontal 48-face plate and a head at 70°.
 ## Quick start
 
 ```bash
-node bin/naives.js plate -o plate.svg          # a 6x8 sheet of faces
-node bin/naives.js face --seed ada --yaw 40    # one face, turned 40°
-node bin/naives.js turn --seed ada --frames 12 # one person, twelve angles
-npm start                                      # the playground, on :5173
+npx tsx bin/naives.ts plate -o plate.svg          # a 6x8 sheet of faces
+npx tsx bin/naives.ts face --seed ada --yaw 40    # one face, turned 40°
+npx tsx bin/naives.ts turn --seed ada --frames 12 # one person, twelve angles
+npm start                                         # the playground, on :5173
 npm test
 ```
+
+The source is TypeScript, run directly with [tsx][] in development and bundled
+with [tsdown][] for publishing. After `npm run build` the CLI is plain Node:
+`node lib/bin/naives.js plate -o plate.svg`.
+
+[tsx]: https://tsx.is
+[tsdown]: https://tsdown.dev
 
 ## The playground
 
@@ -113,13 +120,14 @@ wrap correctly at any angle instead of sliding off.
 
 | module          | job                                                              |
 | --------------- | ---------------------------------------------------------------- |
-| `src/head.js`   | the invisible head: anchors, silhouette, latitude rings, caps    |
-| `src/pen.js`    | the hand: resampling, wobble, double strokes, hatching, scribble |
+| `src/head.ts`   | the invisible head: anchors, silhouette, latitude rings, caps    |
+| `src/pen.ts`    | the hand: resampling, wobble, double strokes, hatching, scribble |
 | `src/surfaces/` | output targets — `SVGSurface`, `Canvas2DSurface` (4 calls each)  |
-| `src/genome.js` | seed → traits                                                    |
-| `src/face.js`   | layer order, and the feature-space helpers                       |
+| `src/genome.ts` | seed → traits                                                    |
+| `src/face.ts`   | layer order, and the feature-space helpers                       |
 | `src/features/` | 132 variants across 11 categories                                |
-| `src/rig.js`    | draw the invisible head, visibly                                 |
+| `src/rig.ts`    | draw the invisible head, visibly                                 |
+| `src/types.ts`  | the shared vocabulary: points, frames, surfaces, the genome      |
 
 Two details do most of the aesthetic work:
 
@@ -136,8 +144,8 @@ wrist, drawn twice at different pressure, and allowed to overshoot its ends.
 ## Feature catalogue
 
 ```bash
-node bin/naives.js list          # all 132 variants
-node bin/naives.js list eyes
+npm run list                     # all 132 variants
+npx tsx bin/naives.ts list eyes
 npm run sheets                   # a contact sheet per category, in out/
 ```
 
@@ -159,13 +167,12 @@ Any trait can be pinned on any command.
 
 ## Deploy
 
-The playground is plain ES modules, so there is nothing to bundle. `npm run
-build` lays the files out for a static host — the page at the root, the library
-under `./src/` — which comes to about 130 kB.
+`npm run build` bundles the playground into a single `app.js` beside the page —
+about 123 kB, with nothing else to fetch.
 
 ```bash
 npm run build          # -> dist/
-npm start dist         # preview exactly what will be deployed, on :5173
+npm start              # build, then preview exactly what will be deployed, on :5173
 ```
 
 `netlify.toml` is already set up (`command = "npm run build"`, `publish = "dist"`),

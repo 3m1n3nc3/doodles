@@ -1,15 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { Rng } from '../src/rng.js'
-import { Head } from '../src/head.js'
-import { SVGSurface } from '../src/surfaces/svg.js'
-import { makeGenome, describe as describeFace } from '../src/genome.js'
-import { renderFace } from '../src/face.js'
-import { renderPlate } from '../src/plate.js'
-import { catalogue } from '../src/index.js'
+import { Rng } from '../src/rng'
+import { Head } from '../src/head'
+import { SVGSurface } from '../src/surfaces/svg'
+import { makeGenome, describe as describeFace } from '../src/genome'
+import { renderFace } from '../src/face'
+import { renderPlate } from '../src/plate'
 
-const render = (opts) => {
+import type { Overrides, Pt } from '../src/types'
+import type { RenderFaceOptions } from '../src/face'
+import { catalogue } from '../src/index'
+
+const render = (opts: RenderFaceOptions) => {
   const s = new SVGSurface({ width: 300, height: 360 })
   const res = renderFace(s, { scale: 90, ...opts })
   
@@ -92,7 +95,7 @@ test('the silhouette is a closed loop that scales with the skull', () => {
 
 test('caps cover a sane slice of the face, at every angle', () => {
   const head = new Head({ scale: 100 })
-  const area = (p) => {
+  const area = (p: Pt[]) => {
     let a = 0
     for (let i = 0; i < p.length; i++) {
       const q = p[(i + 1) % p.length]
@@ -115,7 +118,7 @@ test('every feature variant renders', async () => {
   const cat = await catalogue()
   for (const [category, variants] of Object.entries(cat)) {
     for (const name of variants) {
-      const traits = category === 'eyes'
+      const traits: Overrides = category === 'eyes'
         ? { eyes: { left: { type: name }, right: { type: name } } }
         : category === 'accessories'
           ? { accessories: [{ type: name, size: 0.2, color: '#2b2723', weight: 1, shape: 'round', side: 1, u: 0.9, v: 0.6 }] }

@@ -7,10 +7,14 @@
  * volume (afros, spikes, buns) can push outside the silhouette.
  */
 
-import { curve, loops, oval } from '../shapes.js'
+import { curve, loops, oval } from '../shapes'
+
+import type { FeatureContext, Hairline, HairGenome, Point2, Pt, Vec3, Weighted } from '../types'
+
+export type HairFn = (c: FeatureContext, g: HairGenome) => void
 
 /** Outward unit vector at a screen point, relative to the head centre. */
-function outward(p, centre) {
+function outward(p: Pt, centre: Pt): Point2 {
   const dx = p[0] - centre[0], dy = p[1] - centre[1]
   const l = Math.hypot(dx, dy) || 1
 
@@ -21,21 +25,24 @@ function outward(p, centre) {
  * Hairline shapes. theta runs around the skull with 0 at the *back*, so
  * `front` is what you want when you mean "over the brow".
  */
-const front = (t) => -Math.cos(t)
+const front = (t: number): number => -Math.cos(t)
 
-const LINE = {
+/** Combed to one side. Named because `sidePart` reaches for it directly. */
+const tilted = (a: number): Hairline => (t, v) => v + a * Math.sin(t)
+
+const LINE: Record<string, ((amp: number) => Hairline) | null> = {
   /** A level hairline projects to a dead-straight line head-on, so it is rare. */
   level: null,
   /** Dips under the jaw at the front, rides up onto the cheeks at the sides. */
-  jaw: (a) => (t, v) => v - a * Math.max(0, front(t)),
-  peak: (a) => (t, v) => v - a * front(t),                    // dips to a point over the brow
-  receding: (a) => (t, v) => v + a * Math.max(0, front(t)),   // climbing the forehead
-  m: (a) => (t, v) => v - a * Math.cos(2 * t),                // low centre, high temples
-  tilted: (a) => (t, v) => v + a * Math.sin(t),               // combed to one side
-  wavy: (a) => (t, v) => v + a * Math.sin(3 * t + 1),
+  jaw: (a: number): Hairline => (t, v) => v - a * Math.max(0, front(t)),
+  peak: (a: number): Hairline => (t, v) => v - a * front(t),                    // dips to a point over the brow
+  receding: (a: number): Hairline => (t, v) => v + a * Math.max(0, front(t)),   // climbing the forehead
+  m: (a: number): Hairline => (t, v) => v - a * Math.cos(2 * t),                // low centre, high temples
+  tilted,               // combed to one side
+  wavy: (a: number): Hairline => (t, v) => v + a * Math.sin(3 * t + 1),
 }
 
-export const hair = {
+export const hair: Record<string, HairFn> = {
   none() { },
 
   solid(c, g) {
@@ -66,17 +73,17 @@ export const hair = {
   },
 
   bowl(c, g) {
-    const cap = c.head.cap({ v: g.v, vAt: LINE.level, grow: 0.01 })
+    const cap = c.head.cap({ v: g.v, vAt: null, grow: 0.01 })
     c.pen.blob(cap.poly, { color: g.color, rough: 0.7 })
     c.pen.stroke(cap.edge, { color: c.pal.ink, weight: 1.1, passes: 1, rough: 0.5 })
   },
 
   sidePart(c, g) {
-    const cap = c.head.cap({ v: g.v, vAt: LINE.tilted(0.13 * g.flip), grow: 0.01 })
+    const cap = c.head.cap({ v: g.v, vAt: tilted(0.13 * g.flip), grow: 0.01 })
     c.pen.hatch(cap.poly, { angle: 1.15 * g.flip, gap: c.px * 0.03, color: g.color, alpha: 0.95, weight: 0.55 })
     c.pen.stroke(cap.edge, { color: c.pal.ink, weight: 0.9, passes: 1 })
     // The parting itself: a meridian running back over the crown.
-    const part = []
+    const part: Point2[] = []
     for (let i = 0; i <= 8; i++) {
       const f = c.head.frame(0.55 * g.flip, g.v + 0.05 + (i / 8) * (1.35 - g.v))
       part.push(f.map(0, 0))
@@ -148,11 +155,11 @@ export const hair = {
   mohawk(c, g) {
     // A crest standing on the sagittal plane: sample the front-to-back
     // meridian and push it outward.
-    const inner = [], outerPts = []
+    const inner: Point2[] = [], outerPts: Point2[] = []
     const steps = 16
     for (let i = 0; i <= steps; i++) {
       const phi = 0.45 + (i / steps) * 2.1
-      const d = [0, Math.sin(phi), Math.cos(phi)]
+      const d: Vec3 = [0, Math.sin(phi), Math.cos(phi)]
       const pin = c.head.project(c.head.local(d, 0, 0.01))
       const h = g.volume * (0.35 + 0.65 * Math.sin((i / steps) * Math.PI) ** 0.6)
       const pout = c.head.project(c.head.local(d, 0, h))
@@ -190,8 +197,8 @@ export const hair = {
 
   antenna(c, g) {
     const base = c.head.frame(g.bunU * 0.4, 1.2).map(0, 0)
-    const pts = [base]
-    let p = base
+    const pts: Pt[] = [base]
+    let p: Pt = base
     for (let i = 0; i < 4; i++) {
       p = [p[0] + c.rng.jitter(c.px * 0.05), p[1] - c.px * 0.09]
       pts.push(p)
@@ -227,7 +234,7 @@ export const hair = {
   },
 }
 
-export const HAIR_WEIGHTS = [
+export const HAIR_WEIGHTS: Weighted<string> = [
   ['solid', 14], ['bowl', 9], ['hatched', 9], ['buzz', 7], ['helmet', 6],
   ['sidePart', 6], ['curls', 6], ['spikes', 5], ['fringe', 5], ['afro', 4],
   ['mohawk', 3.5], ['bun', 4], ['topknot', 3], ['wisps', 3], ['sideTufts', 2],
@@ -236,7 +243,7 @@ export const HAIR_WEIGHTS = [
 
 export { LINE as HAIRLINES }
 
-export function drawHair(c) {
+export function drawHair(c: FeatureContext): void {
   const g = c.g.hair;
   (hair[g.type] || hair.solid)(c, g)
 }

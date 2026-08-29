@@ -7,18 +7,42 @@
  * and overshot at the ends.
  */
 
-function mid(a, b) {
- return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] 
+import type {
+  BlobOptions,
+  DotOptions,
+  EllipseOptions,
+  HatchOptions,
+  PathCmd,
+  Point2,
+  Pt,
+  ScribbleOptions,
+  SpeckleOptions,
+  StrokeOptions,
+  Surface,
+} from './types'
+
+import type { Rng } from './rng'
+
+export interface PenOptions {
+  /** Pixels per head radius. */
+  px?: number
+  ink?: string
+  rough?: number
+  width?: number
 }
 
-function resample(pts, step) {
-  const clean = []
+function mid(a: Pt, b: Pt): Point2 {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+}
+
+function resample(pts: Pt[], step: number): Pt[] {
+  const clean: Pt[] = []
   for (const p of pts) {
     const last = clean[clean.length - 1]
     if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 1e-7) clean.push(p)
   }
   if (clean.length < 2) return clean
-  const out = [clean[0].slice()]
+  const out: Pt[] = [clean[0].slice()]
   let acc = 0
   for (let i = 1; i < clean.length; i++) {
     const a = clean[i - 1], b = clean[i]
@@ -34,17 +58,17 @@ function resample(pts, step) {
   const last = clean[clean.length - 1]
   const tail = out[out.length - 1]
   if (Math.hypot(last[0] - tail[0], last[1] - tail[1]) > step * 0.35) out.push(last.slice())
-  
-return out
+
+  return out
 }
 
 /** Quadratic through midpoints: smooth, no visible corners. */
-function smooth(pts, closed) {
+function smooth(pts: Pt[], closed = false): PathCmd[] {
   const n = pts.length
   if (n === 0) return []
   if (n === 1) return [['M', pts[0][0], pts[0][1]]]
   if (n === 2) return [['M', pts[0][0], pts[0][1]], ['L', pts[1][0], pts[1][1]]]
-  const cmds = []
+  const cmds: PathCmd[] = []
   if (closed) {
     const m0 = mid(pts[n - 1], pts[0])
     cmds.push(['M', m0[0], m0[1]])
@@ -61,12 +85,20 @@ function smooth(pts, closed) {
     }
     cmds.push(['L', pts[n - 1][0], pts[n - 1][1]])
   }
-  
-return cmds
+
+  return cmds
 }
 
 export class Pen {
-  constructor(surface, rng, opts = {}) {
+  s: Surface
+  rng: Rng
+  px: number
+  ink: string
+  rough: number
+  width: number
+  step: number
+
+  constructor(surface: Surface, rng: Rng, opts: PenOptions = {}) {
     this.s = surface
     this.rng = rng
     this.px = opts.px ?? 100               // pixels per head radius
@@ -77,9 +109,9 @@ export class Pen {
   }
 
   /** Ink width for a relative weight, never thinner than a real nib. */
-  w(mult = 1) {
- return Math.max(0.55, this.width * mult) 
-}
+  w(mult = 1): number {
+    return Math.max(0.55, this.width * mult)
+  }
 
   // ---------------------------------------------------------------- shaping
 
@@ -87,11 +119,11 @@ export class Pen {
    * Push a polyline around: a smooth AR(1) walk perpendicular to the line,
    * plus a single slow bow across the whole stroke.
    */
-  _waver(pts, amp, bow = 0) {
+  private _waver(pts: Pt[], amp: number, bow = 0): Pt[] {
     const n = pts.length
     if (n < 2) return pts
     const r = this.rng
-    const out = new Array(n)
+    const out: Pt[] = new Array(n)
     let w = r.gauss(0, 0.4)
     for (let i = 0; i < n; i++) {
       w = w * 0.68 + r.gauss(0, 0.55)
@@ -103,25 +135,25 @@ export class Pen {
       const d = w * amp + Math.sin(t * Math.PI) * bow
       out[i] = [pts[i][0] - ty * d, pts[i][1] + tx * d]
     }
-    
-return out
+
+    return out
   }
 
   /** Let an open stroke run past its endpoints, like a real pen does. */
-  _overshoot(pts, amount) {
+  private _overshoot(pts: Pt[], amount: number): Pt[] {
     if (pts.length < 2 || amount <= 0) return pts
-    const ext = (a, b, k) => {
-      let dx = b[0] - a[0], dy = b[1] - a[1]
+    const ext = (a: Pt, b: Pt, k: number): Point2 => {
+      const dx = b[0] - a[0], dy = b[1] - a[1]
       const l = Math.hypot(dx, dy) || 1
-      
-return [b[0] + (dx / l) * k, b[1] + (dy / l) * k]
+
+      return [b[0] + (dx / l) * k, b[1] + (dy / l) * k]
     }
     const out = pts.slice()
     const r = this.rng
     if (r.bool(0.7)) out.unshift(ext(pts[1], pts[0], amount * r.float(0.2, 1)))
     if (r.bool(0.7)) out.push(ext(pts[pts.length - 2], pts[pts.length - 1], amount * r.float(0.2, 1)))
-    
-return out
+
+    return out
   }
 
   // ----------------------------------------------------------------- strokes
@@ -130,7 +162,7 @@ return out
    * The workhorse. Draws a sketchy line through `pts`.
    * passes: 2 gives the doubled-over ink look; 1 is a light single trace.
    */
-  stroke(pts, o = {}) {
+  stroke(pts: Pt[] | null | undefined, o: StrokeOptions = {}): void {
     if (!pts || pts.length < 2) return
     const {
       closed = false, color = this.ink, alpha = 1, weight = 1,
@@ -160,18 +192,18 @@ return out
     }
   }
 
-  line(a, b, o = {}) {
- this.stroke([a, b], o) 
-}
+  line(a: Pt, b: Pt, o: StrokeOptions = {}): void {
+    this.stroke([a, b], o)
+  }
 
   /**
    * Many small strokes as ONE path. Hatching a beard is fifty lines; fifty
    * <path> elements is fifty times the file for no visual gain.
    */
-  strokeMany(paths, o = {}) {
+  strokeMany(paths: Pt[][], o: StrokeOptions = {}): void {
     const { color = this.ink, alpha = 1, weight = 0.5, rough = 1, closed = false } = o
     const amp = this.px * 0.011 * this.rough * rough
-    const cmds = []
+    const cmds: PathCmd[] = []
     for (const pts of paths) {
       if (!pts || pts.length < 2) continue
       const base = pts.length > 2 || o.detail
@@ -184,13 +216,13 @@ return out
   }
 
   /** Cheap roughening for two-point strokes: just shove the ends about. */
-  _twitch(pts, amp) {
+  private _twitch(pts: Pt[], amp: number): Pt[] {
     const r = this.rng
     const a = pts[0], b = pts[pts.length - 1]
     const mx = (a[0] + b[0]) / 2 + r.gauss(0, amp * 0.9)
     const my = (a[1] + b[1]) / 2 + r.gauss(0, amp * 0.9)
-    
-return [
+
+    return [
       [a[0] + r.gauss(0, amp * 0.6), a[1] + r.gauss(0, amp * 0.6)],
       [mx, my],
       [b[0] + r.gauss(0, amp * 0.6), b[1] + r.gauss(0, amp * 0.6)],
@@ -198,7 +230,7 @@ return [
   }
 
   /** Filled shape with a wobbly edge, optionally outlined. */
-  blob(pts, o = {}) {
+  blob(pts: Pt[] | null | undefined, o: BlobOptions = {}): void {
     if (!pts || pts.length < 3) return
     const { color = this.ink, alpha = 1, rough = 1, outline = null } = o
     const amp = this.px * 0.009 * this.rough * rough
@@ -207,38 +239,39 @@ return [
     if (outline) this.stroke(pts, { closed: true, color: outline, weight: o.weight ?? 1, passes: o.passes ?? 1 })
   }
 
-  ellipse(cx, cy, rx, ry, rot = 0, o = {}) {
+  ellipse(cx: number, cy: number, rx: number, ry: number, rot = 0, o: EllipseOptions = {}): Pt[] {
     const seg = o.segments ?? Math.max(14, Math.round(10 + (rx + ry) * 0.5))
     const c = Math.cos(rot), s = Math.sin(rot)
-    const pts = []
+    const pts: Pt[] = []
     for (let i = 0; i < seg; i++) {
       const t = (i / seg) * Math.PI * 2
       const x = Math.cos(t) * rx, y = Math.sin(t) * ry
       pts.push([cx + x * c - y * s, cy + x * s + y * c])
     }
     if (o.fill) {
- this.blob(pts, { color: o.fill, alpha: o.fillAlpha ?? 1, rough: o.rough }) 
-}
+      this.blob(pts, { color: o.fill, alpha: o.fillAlpha ?? 1, rough: o.rough })
+    }
     if (o.stroke !== false) this.stroke(pts, { ...o, closed: true, fill: null })
-    
-return pts
+
+    return pts
   }
 
-  arc(cx, cy, rx, ry, a0, a1, rot = 0, o = {}) {
+  arc(cx: number, cy: number, rx: number, ry: number, a0: number, a1: number,
+    rot = 0, o: EllipseOptions = {}): Pt[] {
     const seg = o.segments ?? Math.max(6, Math.round(Math.abs(a1 - a0) * 6))
     const c = Math.cos(rot), s = Math.sin(rot)
-    const pts = []
+    const pts: Pt[] = []
     for (let i = 0; i <= seg; i++) {
       const t = a0 + ((a1 - a0) * i) / seg
       const x = Math.cos(t) * rx, y = Math.sin(t) * ry
       pts.push([cx + x * c - y * s, cy + x * s + y * c])
     }
     this.stroke(pts, o)
-    
-return pts
+
+    return pts
   }
 
-  dot(x, y, r, o = {}) {
+  dot(x: number, y: number, r: number, o: DotOptions = {}): void {
     const color = o.color ?? this.ink
     this.ellipse(x, y, r, r * this.rng.float(0.85, 1.15), 0, {
       fill: color, stroke: false, rough: 1.4, segments: 12, fillAlpha: o.alpha ?? 1,
@@ -247,17 +280,17 @@ return pts
 
   // -------------------------------------------------------------------- fills
 
-  clip(poly, fn) {
+  clip(poly: Pt[] | null | undefined, fn: () => void): void {
     if (!poly || poly.length < 3) {
- fn() 
+      fn()
 
-return 
-}
+      return
+    }
     this.s.clip(smooth(resample(poly, this.step * 1.5), true), fn)
   }
 
   /** Parallel pencil shading, clipped to a region. */
-  hatch(poly, o = {}) {
+  hatch(poly: Pt[] | null | undefined, o: HatchOptions = {}): void {
     if (!poly || poly.length < 3) return
     const {
       angle = -0.5, gap = this.px * 0.055, color = this.ink,
@@ -270,17 +303,17 @@ return
     }
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
     const R = Math.hypot(x1 - x0, y1 - y0) * 0.62 + gap
-    const lines = (ang) => {
+    const lines = (ang: number): Pt[][] => {
       const dx = Math.cos(ang), dy = Math.sin(ang)
       const nx = -dy, ny = dx
-      const out = []
+      const out: Pt[][] = []
       for (let d = -R; d <= R; d += gap * this.rng.float(1 - jitterGap * 0.5, 1 + jitterGap)) {
         const bx = cx + nx * d, by = cy + ny * d
         const l = R * this.rng.float(0.8, 1.02)
         out.push([[bx - dx * l, by - dy * l], [bx + dx * l, by + dy * l]])
       }
-      
-return out
+
+      return out
     }
     this.clip(poly, () => {
       this.strokeMany(lines(angle), { color, alpha, weight, rough: 1.6 })
@@ -289,7 +322,7 @@ return out
   }
 
   /** Loose circular scribble fill -- crayon, not pencil. */
-  scribble(poly, o = {}) {
+  scribble(poly: Pt[], o: ScribbleOptions = {}): void {
     const { color = this.ink, alpha = 0.7, weight = 0.6, loops = 26 } = o
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
     for (const [x, y] of poly) {
@@ -298,7 +331,7 @@ return out
     }
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
     const rx = (x1 - x0) / 2, ry = (y1 - y0) / 2
-    const pts = []
+    const pts: Pt[] = []
     for (let i = 0; i <= loops * 12; i++) {
       const t = (i / 12) * Math.PI * 2 / 3
       const k = 0.15 + 0.9 * (i / (loops * 12))
@@ -308,14 +341,14 @@ return out
   }
 
   /** Short marks scattered in a region -- stubble, freckles, texture. */
-  speckle(poly, o = {}) {
+  speckle(poly: Pt[], o: SpeckleOptions = {}): void {
     const { count = 40, color = this.ink, alpha = 0.8, len = this.px * 0.03 } = o
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
     for (const [x, y] of poly) {
       if (x < x0) x0 = x; if (x > x1) x1 = x
       if (y < y0) y0 = y; if (y > y1) y1 = y
     }
-    const marks = []
+    const marks: Pt[][] = []
     for (let i = 0; i < count; i++) {
       const x = this.rng.float(x0, x1), y = this.rng.float(y0, y1)
       const a = this.rng.float(0, Math.PI * 2)

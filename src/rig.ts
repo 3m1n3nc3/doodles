@@ -6,12 +6,21 @@
  * fastest way to explain what this library actually does.
  */
 
-const FRONT = { stroke: '#3f6f8f', width: 0.8, alpha: 0.5, cap: 'round' }
-const BACK = { stroke: '#3f6f8f', width: 0.6, alpha: 0.18, cap: 'round', dash: '3 3' }
+import type { Genome, PathCmd, PathStyle, Point2, RingPoint, Surface, Vec3 } from './types'
+import type { Head } from './head'
 
-function runs(items, test) {
-  const out = []
-  let cur = null
+export interface RigOptions {
+  rings?: number
+  meridians?: number
+  anchors?: boolean
+}
+
+const FRONT: PathStyle = { stroke: '#3f6f8f', width: 0.8, alpha: 0.5, cap: 'round' }
+const BACK: PathStyle = { stroke: '#3f6f8f', width: 0.6, alpha: 0.18, cap: 'round', dash: '3 3' }
+
+function runs(items: RingPoint[], test: (r: RingPoint) => boolean): Point2[][] {
+  const out: Point2[][] = []
+  let cur: Point2[] | null = null
   for (const it of items) {
     if (test(it)) {
       if (!cur) {
@@ -24,14 +33,15 @@ function runs(items, test) {
 return out
 }
 
-function poly(surface, pts, style) {
+function poly(surface: Surface, pts: Point2[], style: PathStyle): void {
   if (pts.length < 2) return
-  const cmds = [['M', pts[0][0], pts[0][1]]]
+  const cmds: PathCmd[] = [['M', pts[0][0], pts[0][1]]]
   for (let i = 1; i < pts.length; i++) cmds.push(['L', pts[i][0], pts[i][1]])
   surface.path(cmds, style)
 }
 
-export function drawRig(surface, head, genome = null, opts = {}) {
+export function drawRig(surface: Surface, head: Head, genome: Genome | null = null,
+  opts: RigOptions = {}): void {
   const { rings = 7, meridians = 9, anchors = true } = opts
 
   // Latitude rings.
@@ -45,7 +55,7 @@ export function drawRig(surface, head, genome = null, opts = {}) {
   // Meridians, as rings about a sideways axis.
   for (let i = 0; i < meridians; i++) {
     const a = (i / meridians) * Math.PI
-    const axis = [Math.cos(a), 0, Math.sin(a)]
+    const axis: Vec3 = [Math.cos(a), 0, Math.sin(a)]
     const ring = head.ring({ v: 0, axis, segments: 64 })
     for (const seg of runs(ring, (r) => r.facing > 0)) poly(surface, seg, FRONT)
     for (const seg of runs(ring, (r) => r.facing <= 0)) poly(surface, seg, BACK)
@@ -54,7 +64,7 @@ export function drawRig(surface, head, genome = null, opts = {}) {
   if (!anchors || !genome) return
 
   const g = genome
-  const spots = [
+  const spots: [string, number, number][] = [
     ['eye', (g.eyes.u + g.eyes.skewU), g.eyes.v + g.eyes.skewV],
     ['eye', -(g.eyes.u + g.eyes.skewU), g.eyes.v - g.eyes.skewV],
     ['brow', g.eyes.u, g.brow.v],

@@ -4,7 +4,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import {
   SVGSurface, renderFace, renderPlate, makeGenome, describe, Head, drawRig,
-} from '../src/index.js'
+} from '../src/index'
 
 mkdirSync('out', { recursive: true })
 

@@ -6,52 +6,88 @@
  * that's the feature library's job.
  */
 
-import { drawBeard, drawMoustache } from './features/facialhair.js'
-import { drawBrows, drawEars, drawMouth } from './features/mouth.js'
+import { drawBeard, drawMoustache } from './features/facialhair'
+import { drawBrows, drawEars, drawMouth } from './features/mouth'
 
-import { Head } from './head.js'
-import { Pen } from './pen.js'
-import { Rng } from './rng.js'
-import { drawAccessories } from './features/accessories.js'
-import { drawBackdrop } from './features/backdrop.js'
-import { drawEyes } from './features/eyes.js'
-import { drawHair } from './features/hair.js'
-import { drawHat } from './features/hats.js'
-import { drawNose } from './features/nose.js'
-import { makeGenome } from './genome.js'
-import { marks as markFns } from './features/marks.js'
-import { oval } from './shapes.js'
+import { Head } from './head'
+import { Pen } from './pen'
+import { Rng } from './rng'
+import { drawAccessories } from './features/accessories'
+import { drawBackdrop } from './features/backdrop'
+import { drawEyes } from './features/eyes'
+import { drawHair } from './features/hair'
+import { drawHat } from './features/hats'
+import { drawNose } from './features/nose'
+import { makeGenome } from './genome'
+import { marks as markFns } from './features/marks'
+import { oval } from './shapes'
+
+import type {
+  BlobOptions, DotOptions, FeatureContext, Frame, Genome, HatchOptions,
+  Overrides, Point2, Pt, StrokeOptions, Surface,
+} from './types'
+import type { Seed } from './rng'
+
+export interface RenderFaceOptions {
+  cx?: number
+  cy?: number
+  scale?: number
+  seed?: Seed
+  yaw?: number | null
+  pitch?: number | null
+  roll?: number | null
+  genome?: Genome | null
+  traits?: Overrides
+  backdrop?: boolean
+  rough?: number
+  /** Perspective strength, in head radii. Larger is flatter. */
+  focal?: number
+}
+
+export interface RenderFaceResult {
+  genome: Genome
+  head: Head
+}
+
+interface ContextParts {
+  pen: Pen
+  head: Head
+  rng: Rng
+  g: Genome
+  px: number
+}
 
 /**
  * Helpers handed to every feature. They all speak feature space -- x across
  * the face, y down it, z out of it -- and the frame does the rest.
  */
-function makeContext({ pen, head, rng, g, px }) {
-  const c = {
+function makeContext({ pen, head, rng, g, px }: ContextParts): FeatureContext {
+  const c: FeatureContext = {
     pen, head, rng, g, px, pal: g.palette,
 
     /** Stroke a path given in feature space. */
-    draw(f, pts, o = {}) {
+    draw(f: Frame, pts: Pt[], o: StrokeOptions = {}) {
       pen.stroke(f.poly(pts), o)
     },
 
     /** Fill a shape given in feature space. */
-    fill(f, pts, o = {}) {
+    fill(f: Frame, pts: Pt[], o: BlobOptions = {}) {
       pen.blob(f.poly(pts), o)
     },
 
-    oval(f, cx, cy, rx, ry, rot = 0, o = {}) {
+    oval(f: Frame, cx: number, cy: number, rx: number, ry: number, rot = 0,
+      o: StrokeOptions & { segments?: number, z?: number } = {}) {
       const pts = oval(cx, cy, rx, ry, rot, o.segments ?? 18, o.z ?? 0)
       pen.stroke(f.poly(pts), { closed: true, ...o })
     },
 
     /** A dot that foreshortens properly, because it is a tiny filled oval. */
-    dot(f, x, y, r, o = {}) {
+    dot(f: Frame, x: number, y: number, r: number, o: DotOptions = {}) {
       const pts = oval(x, y, r, r * rng.float(0.85, 1.15), 0, 12, o.z ?? 0)
       pen.blob(f.poly(pts), { color: o.color ?? g.palette.ink, alpha: o.alpha ?? 1, rough: 1.5 })
     },
 
-    hatch(f, pts, o = {}) {
+    hatch(f: Frame, pts: Pt[], o: HatchOptions = {}) {
       pen.hatch(f.poly(pts), o)
     },
 
@@ -62,28 +98,28 @@ function makeContext({ pen, head, rng, g, px }) {
      * tangent (at profile, where you see the ear face-on) and the outward
      * normal (head-on, where a doodle ear sticks out sideways).
      */
-    earFrame(f) {
+    earFrame(f: Frame): Frame {
       const a = Math.min(1, Math.abs(f.facing))
       const bx = f.ex[0] * a + f.ez[0] * (1 - a)
       const by = f.ex[1] * a + f.ez[1] * (1 - a)
       const want = Math.max(Math.hypot(f.ex[0], f.ex[1]), Math.hypot(f.ez[0], f.ez[1]))
       const have = Math.hypot(bx, by) || 1
-      const ex = [(bx / have) * want, (by / have) * want]
-      const map = (x, y, z = 0) => [
+      const ex: Point2 = [(bx / have) * want, (by / have) * want]
+      const map = (x: number, y: number, z = 0): Point2 => [
         f.o[0] + x * ex[0] + y * f.ey[0] + z * f.ez[0],
         f.o[1] + x * ex[1] + y * f.ey[1] + z * f.ez[1],
       ]
 
-      return { ...f, ex, map, poly: (pts) => pts.map((p) => map(p[0], p[1], p[2] || 0)) }
+      return { ...f, ex, map, poly: (pts: Pt[]) => pts.map((p) => map(p[0], p[1], p[2] || 0)) }
     },
 
     /** Same patch of skin, feature space flipped, so pairs read as pairs. */
-    mirrorFrame(f) {
+    mirrorFrame(f: Frame): Frame {
       return {
         ...f,
-        ex: [-f.ex[0], -f.ex[1]],
-        map: (a, b, cz = 0) => f.map(-a, b, cz),
-        poly: (pts) => pts.map((p) => f.map(-p[0], p[1], p[2] || 0)),
+        ex: [-f.ex[0], -f.ex[1]] as Point2,
+        map: (a: number, b: number, cz = 0) => f.map(-a, b, cz),
+        poly: (pts: Pt[]) => pts.map((p) => f.map(-p[0], p[1], p[2] || 0)),
       }
     },
   }
@@ -91,7 +127,7 @@ function makeContext({ pen, head, rng, g, px }) {
   return c
 }
 
-export function renderFace(surface, opts = {}) {
+export function renderFace(surface: Surface, opts: RenderFaceOptions = {}): RenderFaceResult {
   const {
     cx = surface.width / 2,
     cy = surface.height / 2,

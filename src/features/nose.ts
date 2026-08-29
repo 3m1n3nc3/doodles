@@ -4,9 +4,12 @@
  * Turn the head and the nose swings out past the silhouette on its own.
  */
 
-import { oval, arc, curve } from '../shapes.js'
+import type { FeatureContext, Frame, Weighted } from '../types'
+import { arc, curve, oval } from '../shapes'
 
-export const noses = {
+export type NoseFn = (c: FeatureContext, f: Frame, s: number) => void
+
+export const noses: Record<string, NoseFn> = {
   hook(c, f, s) {
     const z = s * 0.58
     c.draw(f, curve([
@@ -111,13 +114,13 @@ export const noses = {
   },
 }
 
-export const NOSE_WEIGHTS = [
+export const NOSE_WEIGHTS: Weighted<string> = [
   ['hook', 15], ['long', 11], ['beak', 8], ['roman', 6], ['ski', 6],
   ['wide', 6], ['button', 5], ['blob', 4], ['triangle', 4], ['tick', 4],
   ['snout', 3], ['pinch', 4], ['nostrils', 2],
 ]
 
-export function drawNose(c) {
+export function drawNose(c: FeatureContext): void {
   const g = c.g.nose
   const f = c.head.frame(g.u, g.v);
   (noses[g.type] || noses.hook)(c, g.flip ? c.mirrorFrame(f) : f, g.size)

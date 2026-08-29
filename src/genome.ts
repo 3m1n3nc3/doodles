@@ -4,18 +4,24 @@
  * you get the same doodle with one thing changed.
  */
 
-import { ACCENT, CLOTH, HAIR, WASH, makePalette } from './palette.js'
-import { BEARD_WEIGHTS, MOUSTACHE_WEIGHTS } from './features/facialhair.js'
-import { BROW_WEIGHTS, EAR_WEIGHTS, MOUTH_WEIGHTS } from './features/mouth.js'
-import { HAIRLINES, HAIR_WEIGHTS } from './features/hair.js'
+import { ACCENT, CLOTH, HAIR, WASH, makePalette } from './palette'
+import { BEARD_WEIGHTS, MOUSTACHE_WEIGHTS } from './features/facialhair'
+import { BROW_WEIGHTS, EAR_WEIGHTS, MOUTH_WEIGHTS } from './features/mouth'
+import { HAIRLINES, HAIR_WEIGHTS } from './features/hair'
 
-import { ACCESSORY_WEIGHTS } from './features/accessories.js'
-import { BACKDROP_WEIGHTS } from './features/backdrop.js'
-import { EYE_WEIGHTS } from './features/eyes.js'
-import { HAT_WEIGHTS } from './features/hats.js'
-import { MARK_WEIGHTS } from './features/marks.js'
-import { NOSE_WEIGHTS } from './features/nose.js'
-import { Rng } from './rng.js'
+import { ACCESSORY_WEIGHTS } from './features/accessories'
+import { BACKDROP_WEIGHTS } from './features/backdrop'
+import { EYE_WEIGHTS } from './features/eyes'
+import { HAT_WEIGHTS } from './features/hats'
+import { MARK_WEIGHTS } from './features/marks'
+import { NOSE_WEIGHTS } from './features/nose'
+import { Rng } from './rng'
+
+import type {
+  AccessoryGenome, EyeSpec, Genome, Lobe, MarkGenome, Overrides,
+  Palette, Skull, Vec3, Weighted, Wobble,
+} from './types'
+import type { Seed } from './rng'
 
 /** Skull archetypes. The silhouette is most of the character. */
 export const SKULLS = {
@@ -29,20 +35,20 @@ export const SKULLS = {
   tall: { rx: 0.88, ry: 1.24, rz: 0.9 },
 }
 
-const SKULL_WEIGHTS = [
+const SKULL_WEIGHTS: Weighted<string> = [
   ['round', 10], ['egg', 8], ['potato', 8], ['wide', 6], ['pear', 6],
   ['long', 5], ['boxy', 5], ['tall', 4],
 ]
 
-function makeSkull(rng) {
+function makeSkull(rng: Rng): Skull {
   const name = rng.pickWeighted(SKULL_WEIGHTS)
-  const base = SKULLS[name]
+  const base = SKULLS[name as keyof typeof SKULLS]
   const rx = base.rx * rng.float(0.94, 1.06)
   const ry = base.ry * rng.float(0.94, 1.06)
   const rz = base.rz * rng.float(0.94, 1.06)
 
-  const lobes = []
-  const add = (dir, amp, power) => lobes.push({ dir, amp, power })
+  const lobes: Lobe[] = []
+  const add = (dir: Vec3, amp: number, power: number) => lobes.push({ dir, amp, power })
 
   if (name === 'pear') {
     add([0, -0.85, 0.5], 0.16, 2.2); add([0.9, -0.5, 0.2], 0.1, 2.5); add([-0.9, -0.5, 0.2], 0.1, 2.5)
@@ -70,7 +76,7 @@ function makeSkull(rng) {
   const side = rng.sign()
   add([side * 0.9, rng.float(-0.4, 0.5), rng.float(0, 0.5)], rng.float(0.03, 0.09), rng.float(2, 4))
 
-  const wobble = []
+  const wobble: Wobble[] = []
   const terms = rng.int(3, 4)
   for (let i = 0; i < terms; i++) {
     wobble.push({
@@ -85,7 +91,7 @@ function makeSkull(rng) {
 }
 
 /** Pass `twin` to echo the other eye; leave it out for a fresh one. */
-function pickEye(rng, twin) {
+function pickEye(rng: Rng, twin: EyeSpec | null = null): EyeSpec {
   if (twin) {
     return { type: twin.type, size: twin.size * rng.float(0.9, 1.1), bag: twin.bag }
   }
@@ -97,7 +103,7 @@ function pickEye(rng, twin) {
   }
 }
 
-export function makeGenome(seed = 1, overrides = {}) {
+export function makeGenome(seed: Seed = 1, overrides: Overrides = {}): Genome {
   const rng = new Rng(seed)
   const pal = makePalette(rng.fork('palette'), overrides.palette || {})
   const skull = makeSkull(rng.fork('skull'))
@@ -113,7 +119,7 @@ export function makeGenome(seed = 1, overrides = {}) {
   const eyeV = r.float(-0.04, 0.2)
   const mouthV = r.float(-0.76, -0.44)
 
-  const g = {
+  const g: Genome = {
     seed,
     skull,
     palette: pal,
@@ -176,7 +182,7 @@ export function makeGenome(seed = 1, overrides = {}) {
         v: r.float(0.34, 0.6),
         color: hairColor,
         lineKind,
-        line: lineKind === 'level' ? null : HAIRLINES[lineKind](amp),
+        line: lineKind === 'level' ? null : HAIRLINES[lineKind]!(amp),
         lineAmp: amp,
         hatchAngle: r.float(-1.4, 1.4),
         filled: r.bool(0.72),
@@ -215,7 +221,7 @@ export function makeGenome(seed = 1, overrides = {}) {
         filled: r.bool(0.55),
         hatchAngle: r.float(0.8, 1.8),
         length: r.float(0.25, 0.7),
-        line: HAIRLINES.jaw(r.float(0.07, 0.2)),
+        line: HAIRLINES.jaw!(r.float(0.07, 0.2)),
         moustache: type === 'moustache'
           ? r.pickWeighted(MOUSTACHE_WEIGHTS.filter((m) => m[0] !== 'none'))
           : r.pickWeighted(MOUSTACHE_WEIGHTS),
@@ -223,8 +229,8 @@ export function makeGenome(seed = 1, overrides = {}) {
       }
     })(),
 
-    accessories: [],
-    marks: [],
+    accessories: [] as AccessoryGenome[],
+    marks: [] as MarkGenome[],
 
     backdrop: (() => {
       const type = r.pickWeighted(BACKDROP_WEIGHTS)
@@ -249,7 +255,7 @@ export function makeGenome(seed = 1, overrides = {}) {
   // Accessories: at most a couple, and never two things fighting over the eyes.
   const ar = rng.fork('accessories')
   const count = ar.pickWeighted([[0, 8], [1, 10], [2, 5], [3, 1]])
-  const taken = new Set()
+  const taken = new Set<string>()
   const eyeSlots = new Set(['glasses', 'monocle', 'eyepatch', 'mask'])
   for (let i = 0; i < count; i++) {
     const type = ar.pickWeighted(ACCESSORY_WEIGHTS)
@@ -261,7 +267,7 @@ export function makeGenome(seed = 1, overrides = {}) {
 
   const mr = rng.fork('marks')
   const mcount = mr.pickWeighted([[0, 7], [1, 10], [2, 6], [3, 2]])
-  const mtaken = new Set()
+  const mtaken = new Set<string>()
   for (let i = 0; i < mcount; i++) {
     const type = mr.pickWeighted(MARK_WEIGHTS)
     if (mtaken.has(type)) continue
@@ -272,8 +278,8 @@ export function makeGenome(seed = 1, overrides = {}) {
   return applyOverrides(g, overrides)
 }
 
-function makeAccessory(type, r, pal, g) {
-  const a = { type }
+function makeAccessory(type: string, r: Rng, pal: Palette, g: Genome): AccessoryGenome {
+  const a: AccessoryGenome = { type }
   switch (type) {
     case 'glasses':
       a.shape = r.pickWeighted([['round', 6], ['square', 3], ['rounded', 3]])
@@ -335,8 +341,8 @@ function makeAccessory(type, r, pal, g) {
   return a
 }
 
-function makeMark(type, r, pal) {
-  const m = { type }
+function makeMark(type: string, r: Rng, pal: Palette): MarkGenome {
+  const m: MarkGenome = { type }
   if (type === 'blush') {
     m.color = r.pick([ACCENT.pink, '#d9a08f', '#c98f8f', ACCENT.red])
     m.style = r.pickWeighted([['wash', 6], ['hatch', 3]])
@@ -353,7 +359,7 @@ function makeMark(type, r, pal) {
   return m
 }
 
-const isPlain = (v) => v != null && typeof v === 'object' && !Array.isArray(v) && typeof v !== 'function'
+const isPlain = (v: unknown): v is Record<string, unknown> => v != null && typeof v === 'object' && !Array.isArray(v) && typeof v !== 'function'
 
 /**
  * Merge overrides into a genome.
@@ -362,19 +368,20 @@ const isPlain = (v) => v != null && typeof v === 'object' && !Array.isArray(v) &
  * you'd expect. Objects merge deeply, so `{ eyes: { left: { type: 'spiral' } } }`
  * changes one eye's type and leaves its size alone.
  */
-export function applyOverrides(g, overrides = {}) {
+export function applyOverrides<T>(g: T, overrides: Overrides = {}): T {
+  const node = g as Record<string, any>
   for (const [k, v] of Object.entries(overrides)) {
     if (k === 'palette' || v == null) continue
-    if (typeof v === 'string' && isPlain(g[k])) g[k].type = v
-    else if (isPlain(v) && isPlain(g[k])) applyOverrides(g[k], v)
-    else g[k] = v
+    if (typeof v === 'string' && isPlain(node[k])) node[k].type = v
+    else if (isPlain(v) && isPlain(node[k])) applyOverrides(node[k], v)
+    else node[k] = v
   }
 
   return g
 }
 
 /** A one-line human description, handy for captions and debugging. */
-export function describe(g) {
+export function describe(g: Genome): string {
   const bits = [
     g.skull.name,
     `${g.eyes.left.type}/${g.eyes.right.type} eyes`,

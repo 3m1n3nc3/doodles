@@ -29,7 +29,9 @@ export default defineConfig(
     },
     [
         globalIgnores([
-            'dist/**',
+            'dist/**',      // the built playground
+            'lib/**',       // the built library
+            'out/**',       // rendered SVGs
             'node_modules/**',
         ])
     ],

@@ -4,16 +4,28 @@
  * that sit slightly off-register from the drawing, which is most of the charm.
  */
 
-import { curve, oval } from '../shapes.js'
+import { curve, oval } from '../shapes'
 
-function bbox(head, pad) {
+import type { BackdropGenome, FeatureContext, Pt, Weighted } from '../types'
+import type { Head } from '../head'
+
+export type BackdropFn = (c: FeatureContext, g: BackdropGenome) => void
+
+interface Box {
+  cx: number
+  cy: number
+  rx: number
+  ry: number
+}
+
+function bbox(head: Head, pad: number): Box {
   const b = head.bounds()
   const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2
 
   return { cx, cy, rx: (b.w / 2) * pad, ry: (b.h / 2) * pad }
 }
 
-export const backdrops = {
+export const backdrops: Record<string, BackdropFn> = {
   none() { },
 
   circle(c, g) {
@@ -52,7 +64,7 @@ export const backdrops = {
 
   star(c, g) {
     const { cx, cy, rx, ry } = bbox(c.head, g.pad)
-    const pts = []
+    const pts: Pt[] = []
     const spikes = g.spikes
     for (let i = 0; i < spikes * 2; i++) {
       const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2
@@ -91,7 +103,7 @@ export const backdrops = {
 
   torn(c, g) {
     const { cx, cy, rx, ry } = bbox(c.head, g.pad)
-    const pts = []
+    const pts: Pt[] = []
     for (let i = 0; i < 26; i++) {
       const a = (i / 26) * Math.PI * 2
       const k = 1 + c.rng.jitter(0.09)
@@ -101,13 +113,13 @@ export const backdrops = {
   },
 }
 
-export const BACKDROP_WEIGHTS = [
+export const BACKDROP_WEIGHTS: Weighted<string> = [
   ['none', 16], ['circle', 20], ['disc', 8], ['roundSquare', 7], ['rect', 5],
   ['hatchPatch', 7], ['ringOutline', 6], ['doubleRing', 4], ['torn', 6],
   ['star', 2.5], ['scribble', 3],
 ]
 
-export function drawBackdrop(c) {
+export function drawBackdrop(c: FeatureContext): void {
   const g = c.g.backdrop;
   (backdrops[g.type] || backdrops.none)(c, g)
 }

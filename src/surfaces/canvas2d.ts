@@ -3,33 +3,42 @@
  * `canvas` npm package in Node if you want PNGs. Same four calls as SVG.
  */
 
-function hexToRgb(hex) {
+import type { PaperTextureOptions, PathCmd, PathStyle, Surface, Vec3 } from '../types'
+
+/** The slice of the 2D context this surface actually touches. */
+export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
+function hexToRgb(hex: string): Vec3 {
   let h = hex.replace('#', '')
   if (h.length === 3) h = h.split('').map((c) => c + c).join('')
   const n = parseInt(h, 16)
-  
-return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-function withAlpha(color, alpha) {
+function withAlpha(color: string, alpha?: number): string {
   if (alpha == null || alpha >= 1) return color
   if (color.startsWith('#')) {
     const [r, g, b] = hexToRgb(color)
-    
-return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
+
+    return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
   }
-  
-return color
+
+  return color
 }
 
-export class Canvas2DSurface {
-  constructor(ctx, width, height) {
+export class Canvas2DSurface implements Surface {
+  ctx: Ctx2D
+  width: number
+  height: number
+
+  constructor(ctx: Ctx2D, width?: number, height?: number) {
     this.ctx = ctx
     this.width = width ?? ctx.canvas?.width ?? 400
     this.height = height ?? ctx.canvas?.height ?? 500
   }
 
-  _trace(cmds) {
+  private _trace(cmds: PathCmd[]): void {
     const c = this.ctx
     c.beginPath()
     for (const cmd of cmds) {
@@ -44,7 +53,7 @@ export class Canvas2DSurface {
     }
   }
 
-  path(cmds, style) {
+  path(cmds: PathCmd[], style: PathStyle): void {
     if (!cmds || !cmds.length) return
     const c = this.ctx
     this._trace(cmds)
@@ -63,7 +72,7 @@ export class Canvas2DSurface {
     }
   }
 
-  clip(cmds, fn) {
+  clip(cmds: PathCmd[], fn: () => void): void {
     const c = this.ctx
     c.save()
     this._trace(cmds)
@@ -72,11 +81,11 @@ export class Canvas2DSurface {
     c.restore()
   }
 
-  rect(x, y, w, h, style) {
+  rect(x: number, y: number, w: number, h: number, style: PathStyle): void {
     this.path([['M', x, y], ['L', x + w, y], ['L', x + w, y + h], ['L', x, y + h], ['Z']], style)
   }
 
-  group(transform, fn) {
+  group(transform: string, fn: () => void): void {
     const c = this.ctx
     c.save()
     const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(transform)
@@ -85,7 +94,7 @@ export class Canvas2DSurface {
     c.restore()
   }
 
-  background(color) {
+  background(color: string): void {
     const c = this.ctx
     c.save()
     c.fillStyle = color
@@ -94,7 +103,7 @@ export class Canvas2DSurface {
   }
 
   /** Speckled grain, drawn once into an offscreen tile and repeated. */
-  paperTexture({ opacity = 0.055, scale = 1, rng = Math.random } = {}) {
+  paperTexture({ opacity = 0.055, scale = 1, rng = Math.random }: PaperTextureOptions = {}): void {
     const c = this.ctx
     const step = Math.max(1, Math.round(scale))
     c.save()

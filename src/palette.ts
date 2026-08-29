@@ -3,6 +3,10 @@
  * washes, ink that is never quite black.
  */
 
+import type { Accents, Palette, PaletteOptions } from './types'
+
+import type { Rng } from './rng'
+
 export const PAPER = ['#efe9dd', '#ece5d8', '#f2ecdf', '#e9e1d2']
 
 export const INK = ['#2b2723', '#26221f', '#332b26', '#2a2e38', '#3a2c26']
@@ -29,7 +33,7 @@ export const CLOTH = [
   '#8f8256', '#4f5f5a', '#a8794f',
 ]
 
-export const ACCENT = {
+export const ACCENT: Accents = {
   red: '#b4483f',
   cyan: '#5a95a8',
   blue: '#4a5f8a',
@@ -40,10 +44,10 @@ export const ACCENT = {
 }
 
 /** Pull a coherent set of colours for one face. */
-export function makePalette(rng, opts = {}) {
+export function makePalette(rng: Rng, opts: PaletteOptions = {}): Palette {
   const paper = opts.paper ?? rng.pick(PAPER)
   const ink = opts.ink ?? rng.pick(INK)
-  const skin = opts.skin ?? rng.pickWeighted([
+  const skin = opts.skin ?? rng.pickWeighted<string | null>([
     [rng.pick(SKIN.slice(0, 4)), 5],
     [rng.pick(SKIN.slice(4, 8)), 3],
     [null, 4], // no fill: pure line drawing, like the ink-only plates
@@ -55,6 +59,6 @@ export function makePalette(rng, opts = {}) {
   ])
   const wash = opts.wash ?? rng.pick(WASH)
   const cloth = opts.cloth ?? rng.pick(CLOTH)
-  
-return { paper, ink, skin, hair, wash, cloth, accent: ACCENT }
+
+  return { paper, ink, skin, hair, wash, cloth, accent: ACCENT }
 }

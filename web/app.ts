@@ -15,29 +15,58 @@ import {
   makeGenome,
   renderFace,
   renderPlate,
-} from '../src/index.js'
-import { brows, ears, mouths } from '../src/features/mouth.js'
+} from '../src/index'
+import { brows, ears, mouths } from '../src/features/mouth'
 
-import { backdrops } from '../src/features/backdrop.js'
-import { eyes } from '../src/features/eyes.js'
-import { facialHair } from '../src/features/facialhair.js'
-import { hair } from '../src/features/hair.js'
-import { hats } from '../src/features/hats.js'
-import { noses } from '../src/features/nose.js'
+import { backdrops } from '../src/features/backdrop'
+import { eyes } from '../src/features/eyes'
+import { facialHair } from '../src/features/facialhair'
+import { hair } from '../src/features/hair'
+import { hats } from '../src/features/hats'
+import { noses } from '../src/features/nose'
 
-const $ = (id) => document.getElementById(id)
-const stage = $('stage')
-const ctx = stage.getContext('2d')
+import type { Overrides, PlateCell } from '../src/index'
 
-const state = {
+type Tab = 'plate' | 'head' | 'turn'
+
+/** The one element lookup, narrowed at each call site by the caller. */
+const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
+  document.getElementById(id) as T
+
+const stage = $<HTMLCanvasElement>('stage')
+const ctx = stage.getContext('2d')!
+
+interface State {
+  tab: Tab
+  seed: string
+  cols: number
+  rows: number
+  turn: number
+  tilt: number
+  paper: boolean
+  yaw: number
+  pitch: number
+  roll: number
+  spin: boolean
+  rig: boolean
+  frames: number
+  sweep: number
+  /** feature category -> variant name ('' = let the seed decide) */
+  pinned: Record<string, string>
+  plateFaces: PlateCell[]
+  /** canvas size in CSS px, before device scaling */
+  logical: { w: number, h: number }
+}
+
+const state: State = {
   tab: 'plate',
   seed: 'naives',
   cols: 6, rows: 8, turn: 0, tilt: 0, paper: true,
   yaw: 0, pitch: 0, roll: 0, spin: false, rig: false,
   frames: 10, sweep: 160,
-  pinned: {},          // feature category -> variant name ('' = let the seed decide)
+  pinned: {},
   plateFaces: [],
-  logical: { w: 0, h: 0 },   // canvas size in CSS px, before device scaling
+  logical: { w: 0, h: 0 },
 }
 
 /** Matches the CSS breakpoint, so layout and sizing agree. */
@@ -52,8 +81,16 @@ const narrow = () => window.matchMedia('(max-width: 720px)').matches
  * narrow screen the canvas is what gives `main` its height, so measuring the
  * parent's height to size the canvas is circular and collapses it to nothing.
  */
-function sizeFor() {
-  const rect = stage.parentElement.getBoundingClientRect()
+interface Size {
+  w: number
+  h: number
+  cols?: number
+  rows?: number
+  cell?: number
+}
+
+function sizeFor(): Size {
+  const rect = stage.parentElement!.getBoundingClientRect()
   const pad = narrow() ? 12 : 24
   const page = document.documentElement.clientWidth
   const availW = Math.max(260, Math.min(rect.width, page) - pad * 2)
@@ -78,7 +115,7 @@ function sizeFor() {
   return { w: Math.round(s), h: Math.round(s) }
 }
 
-function fitCanvas(w, h) {
+function fitCanvas(w: number, h: number): Canvas2DSurface {
   const dpr = Math.min(2, window.devicePixelRatio || 1)
   stage.width = Math.round(w * dpr)
   stage.height = Math.round(h * dpr)
@@ -91,8 +128,8 @@ function fitCanvas(w, h) {
   return new Canvas2DSurface(ctx, w, h)
 }
 
-function traits() {
-  const t = {}
+function traits(): Overrides {
+  const t: Overrides = {}
   for (const [k, v] of Object.entries(state.pinned)) {
     if (!v) continue
     if (k === 'eyes') t.eyes = { left: { type: v }, right: { type: v } }
@@ -104,7 +141,7 @@ function traits() {
 
 // ------------------------------------------------------------------ draw
 
-function draw() {
+function draw(): void {
   const size = sizeFor()
   const surface = fitCanvas(size.w, size.h)
   const rng = new Rng(`${state.seed}~paper`)
@@ -126,7 +163,7 @@ function draw() {
 
   if (state.tab === 'turn') {
     const g = makeGenome(state.seed, traits())
-    const { cols, cell } = size
+    const cols = size.cols!, cell = size.cell!
     for (let i = 0; i < state.frames; i++) {
       const t = state.frames === 1 ? 0 : i / (state.frames - 1)
       const sweep = (state.sweep * Math.PI) / 180
@@ -164,7 +201,7 @@ function draw() {
 
 // ---------------------------------------------------------------- export
 
-function download(blob, name) {
+function download(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -173,11 +210,13 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function exportPNG() {
-  stage.toBlob((b) => download(b, `naives-${state.tab}-${state.seed}.png`), 'image/png')
+function exportPNG(): void {
+  stage.toBlob((b) => {
+    if (b) download(b, `naives-${state.tab}-${state.seed}.png`)
+  }, 'image/png')
 }
 
-function exportSVG() {
+function exportSVG(): void {
   const size = sizeFor()
   const scale = state.tab === 'plate' ? 2 : 2      // crisper vector page
   const s = new SVGSurface({ width: size.w * scale, height: size.h * scale, background: '#efe9dd' })
@@ -226,7 +265,7 @@ const CATEGORIES = {
   hair, hat: hats, beard: facialHair, backdrop: backdrops,
 }
 
-function buildPickers() {
+function buildPickers(): void {
   const host = $('pickers')
   for (const [cat, mod] of Object.entries(CATEGORIES)) {
     const label = document.createElement('label')
@@ -243,8 +282,13 @@ function buildPickers() {
   }
 }
 
-function bindRange(id, key, fmt = (v) => v) {
-  const el = $(id)
+/** The numeric slider-backed slots of `state`. */
+type RangeKey = {
+  [K in keyof State]: State[K] extends number ? K : never
+}[keyof State]
+
+function bindRange(id: string, key: RangeKey, fmt: (v: string) => string = (v) => v): void {
+  const el = $<HTMLInputElement>(id)
   const out = $(`${id}Out`)
   const sync = () => {
     state[key] = Number(el.value)
@@ -256,13 +300,13 @@ function bindRange(id, key, fmt = (v) => v) {
   sync()
 }
 
-function showTab(tab) {
+function showTab(tab: Tab): void {
   state.tab = tab
-  for (const b of document.querySelectorAll('#tabs button')) {
+  for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) {
     b.setAttribute('aria-selected', String(b.dataset.tab === tab))
   }
-  for (const fs of document.querySelectorAll('fieldset[data-for]')) {
-    fs.hidden = !fs.dataset.for.split(' ').includes(tab)
+  for (const fs of document.querySelectorAll<HTMLElement>('fieldset[data-for]')) {
+    fs.hidden = !fs.dataset.for!.split(' ').includes(tab)
   }
   draw()
   // On a phone the canvas sits below the controls, so a tab change would
@@ -270,33 +314,33 @@ function showTab(tab) {
   if (narrow()) stage.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-for (const b of document.querySelectorAll('#tabs button')) {
-  b.addEventListener('click', () => showTab(b.dataset.tab))
+for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) {
+  b.addEventListener('click', () => showTab(b.dataset.tab as Tab))
 }
 
-$('seed').addEventListener('input', (e) => {
-  state.seed = e.target.value || 'naives'; draw()
+$<HTMLInputElement>('seed').addEventListener('input', (e) => {
+  state.seed = (e.currentTarget as HTMLInputElement).value || 'naives'; draw()
 })
 $('reroll').addEventListener('click', () => {
   state.seed = Math.random().toString(36).slice(2, 9)
-  $('seed').value = state.seed
+  $<HTMLInputElement>('seed').value = state.seed
   draw()
 })
 $('png').addEventListener('click', exportPNG)
 $('svg').addEventListener('click', exportSVG)
 $('paper').addEventListener('change', (e) => {
-  state.paper = e.target.checked; draw()
+  state.paper = (e.currentTarget as HTMLInputElement).checked; draw()
 })
 $('spin').addEventListener('change', (e) => {
-  state.spin = e.target.checked
+  state.spin = (e.currentTarget as HTMLInputElement).checked
 })
 $('rig').addEventListener('change', (e) => {
-  state.rig = e.target.checked; draw()
+  state.rig = (e.currentTarget as HTMLInputElement).checked; draw()
 })
 
 if (narrow()) {                    // legible defaults on a small screen
-  $('cols').value = 3
-  $('rows').value = 5
+  $<HTMLInputElement>('cols').value = '3'
+  $<HTMLInputElement>('rows').value = '5'
 }
 bindRange('cols', 'cols')
 bindRange('rows', 'rows')
@@ -311,14 +355,21 @@ buildPickers()
 
 // ------------------------------------------------------- drag to rotate
 
-let drag = null
+interface Drag {
+  x: number
+  y: number
+  yaw: number
+  pitch: number
+}
+
+let drag: Drag | null = null
 stage.addEventListener('pointerdown', (e) => {
   if (state.tab === 'plate') {
     // Click a face to inspect it in 3D.
     const rect = stage.getBoundingClientRect()
     const x = ((e.clientX - rect.left) / rect.width) * state.logical.w
     const y = ((e.clientY - rect.top) / rect.height) * state.logical.h
-    let best = null, bd = Infinity
+    let best: PlateCell | null = null, bd = Infinity
     for (const f of state.plateFaces) {
       const d = (f.cx - x) ** 2 + (f.cy - y) ** 2
       if (d < bd) {
@@ -327,7 +378,7 @@ stage.addEventListener('pointerdown', (e) => {
     }
     if (best && bd < (best.scale * 1.6) ** 2) {
       state.seed = best.seed
-      $('seed').value = best.seed
+      $<HTMLInputElement>('seed').value = best.seed
       showTab('head')
     }
 
@@ -340,11 +391,11 @@ stage.addEventListener('pointerdown', (e) => {
 
 stage.addEventListener('pointermove', (e) => {
   if (!drag) return
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
   state.yaw = clamp(drag.yaw + (e.clientX - drag.x) * 0.4, -90, 90)
   state.pitch = clamp(drag.pitch - (e.clientY - drag.y) * 0.25, -40, 40)
-  $('yaw').value = Math.round(state.yaw)
-  $('pitch').value = Math.round(state.pitch)
+  $<HTMLInputElement>('yaw').value = String(Math.round(state.yaw))
+  $<HTMLInputElement>('pitch').value = String(Math.round(state.pitch))
   $('yawOut').textContent = `${Math.round(state.yaw)}°`
   $('pitchOut').textContent = `${Math.round(state.pitch)}°`
   draw()
@@ -359,14 +410,14 @@ stage.addEventListener('pointercancel', endDrag)
 // --------------------------------------------------------------- ticking
 
 let t0 = performance.now()
-function frame(now) {
+function frame(now: number): void {
   if (state.spin && state.tab === 'head') {
     if (now - t0 > 70) {
       t0 = now
       state.yaw = Math.round(Math.sin(now / 2200) * 72)
       state.pitch = Math.round(Math.sin(now / 3700) * 16)
-      $('yaw').value = state.yaw
-      $('pitch').value = state.pitch
+      $<HTMLInputElement>('yaw').value = String(state.yaw)
+      $<HTMLInputElement>('pitch').value = String(state.pitch)
       $('yawOut').textContent = `${state.yaw}°`
       $('pitchOut').textContent = `${state.pitch}°`
       draw()
@@ -376,7 +427,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame)
 
-let resizeTimer = null
+let resizeTimer: ReturnType<typeof setTimeout> | undefined
 const onResize = () => {
   clearTimeout(resizeTimer)
   resizeTimer = setTimeout(draw, 120)
