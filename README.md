@@ -41,6 +41,65 @@ with [tsdown][] for publishing. After `npm run build` the CLI is plain Node:
 [tsx]: https://tsx.is
 [tsdown]: https://tsdown.dev
 
+## React and Vue
+
+Both wrappers ship in the same package, as `naives/react` and `naives/vue`.
+They are optional peer dependencies, so installing naives does not drag either
+framework in, and the core library never imports them.
+
+```jsx
+import { Face, Plate, useTurntable } from 'naives/react'
+
+const { yaw, pitch, bind } = useTurntable()
+
+<Face seed="ada" yaw={yaw} pitch={pitch} width={280} {...bind} />
+<Plate cols={6} rows={8} seed="monday" onSelect={(f) => setSeed(f.seed)} />
+```
+
+```vue
+<script setup>
+import { Face, Plate, useTurntable } from 'naives/vue'
+
+const { yaw, pitch, bind } = useTurntable()
+</script>
+
+<template>
+  <Face seed="ada" :yaw="yaw" :pitch="pitch" :width="280" v-bind="bind" />
+  <Plate :cols="6" :rows="8" seed="monday" @select="f => seed = f.seed" />
+</template>
+```
+
+Angles are **degrees**, the same as the CLI's `--yaw 40` — a slider can be wired
+straight to them.
+
+| prop                     | meaning                                                        |
+| ------------------------ | -------------------------------------------------------------- |
+| `seed`                   | the string or number the whole face is derived from            |
+| `yaw` `pitch` `roll`     | degrees                                                        |
+| `traits`                 | pin features: `{ nose: 'hook', hair: 'mohawk' }`               |
+| `genome`                 | a genome you already have; wins over `seed` and `traits`        |
+| `width` `height` `scale` | pixels; height defaults to `width * 1.2`                        |
+| `background` `paper`     | page colour, and the grain over it (`true`, `false`, or 0..1)   |
+| `backdrop` `rough` `rig` | the wash behind the head, the ink wobble, the debug skull       |
+| `as`                     | `"svg"` (default, server-renderable) or `"canvas"`              |
+
+`<Face>` renders inline SVG by default, so it works under SSR and stays crisp
+at any zoom; pass `as="canvas"` when you are redrawing every frame. Either way
+it carries a generated `aria-label` — *"pear, ring/ring eyes, hook nose, gasp
+mouth"* — which you can replace with `label`.
+
+The hooks and composables are there when you want the pieces rather than the
+component:
+
+| React                 | Vue                   | gives you                              |
+| --------------------- | --------------------- | -------------------------------------- |
+| `useFace(opts)`       | `useFace(opts)`       | `svg`, `genome`, `description`         |
+| `usePlate(opts)`      | `usePlate(opts)`      | `svg`, `faces`                         |
+| `useTurntable(opts)`  | `useTurntable(opts)`  | `yaw`, `pitch`, `bind` for drag-to-turn |
+
+The Vue composables take a ref, a getter or a plain object, so
+`useFace(() => ({ seed, yaw: yaw.value }))` recomputes on its own.
+
 ## The playground
 
 `npm start` then open <http://localhost:5173/>. Three views over the same library:

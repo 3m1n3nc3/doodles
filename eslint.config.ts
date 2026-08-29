@@ -3,6 +3,9 @@ import { globalIgnores } from 'eslint/config'
 import globals from 'globals'
 import js from '@eslint/js'
 import markdown from '@eslint/markdown'
+import reactHooks from 'eslint-plugin-react-hooks'
+
+import type { ESLint } from 'eslint'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
@@ -16,6 +19,20 @@ export default defineConfig(
     },
     js.configs.recommended,
     ...tseslint.configs.recommended,
+    {
+        // The React wrapper is the only place hooks live.
+        files: ['src/react/**/*.tsx'],
+        plugins: {
+            // The plugin still ships the legacy `configs.flat` nesting, which
+            // ESLint 10's own Plugin type no longer describes. The rules
+            // themselves are fine -- only the config bundle is mistyped.
+            'react-hooks': reactHooks as unknown as ESLint.Plugin,
+        },
+        rules: {
+            'react-hooks/rules-of-hooks': 'error',
+            'react-hooks/exhaustive-deps': 'warn',
+        },
+    },
     {
         files: ['docs/**/*.md', 'README.md'],
         plugins: {

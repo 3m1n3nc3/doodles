@@ -36,22 +36,27 @@ function pathData(cmds: PathCmd[], precision: number): string {
   return out.join(' ')
 }
 
+/**
+ * Colours and dash patterns come from the caller, and the result is routinely
+ * injected as markup (`dangerouslySetInnerHTML`, `v-html`), so anything that is
+ * not a number we generated ourselves gets escaped on the way out.
+ */
 function attrs(style: PathStyle): string {
   const a: string[] = []
   if (style.fill) {
-    a.push(`fill="${style.fill}"`)
+    a.push(`fill="${esc(style.fill)}"`)
     if (style.alpha != null && style.alpha < 1) a.push(`fill-opacity="${round(style.alpha, 3)}"`)
-    if (style.fillRule) a.push(`fill-rule="${style.fillRule}"`)
+    if (style.fillRule) a.push(`fill-rule="${esc(style.fillRule)}"`)
   } else {
     a.push('fill="none"')
   }
   if (style.stroke) {
-    a.push(`stroke="${style.stroke}"`)
+    a.push(`stroke="${esc(style.stroke)}"`)
     a.push(`stroke-width="${round(style.width ?? 1, 2)}"`)
     if (style.alpha != null && style.alpha < 1) a.push(`stroke-opacity="${round(style.alpha, 3)}"`)
-    if (style.cap) a.push(`stroke-linecap="${style.cap}"`)
-    if (style.join) a.push(`stroke-linejoin="${style.join}"`)
-    if (style.dash) a.push(`stroke-dasharray="${style.dash}"`)
+    if (style.cap) a.push(`stroke-linecap="${esc(style.cap)}"`)
+    if (style.join) a.push(`stroke-linejoin="${esc(style.join)}"`)
+    if (style.dash) a.push(`stroke-dasharray="${esc(style.dash)}"`)
   }
 
   return a.join(' ')
@@ -123,7 +128,7 @@ export class SVGSurface implements Surface {
   toString(): string {
     const head = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.width}" height="${this.height}" `
       + `viewBox="0 0 ${this.width} ${this.height}">`
-    const bg = this._bg ? `<rect width="100%" height="100%" fill="${this._bg}"/>` : ''
+    const bg = this._bg ? `<rect width="100%" height="100%" fill="${esc(this._bg)}"/>` : ''
     const grain = this._grain
       ? `<rect width="100%" height="100%" filter="url(#grain)" opacity="${this._grain}" style="mix-blend-mode:multiply"/>`
       : ''

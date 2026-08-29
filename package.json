@@ -12,7 +12,9 @@
     "svg",
     "canvas",
     "avatar",
-    "illustration"
+    "illustration",
+    "react",
+    "vue"
   ],
   "main": "./lib/index.js",
   "exports": {
@@ -40,6 +42,14 @@
       "types": "./lib/surfaces/canvas2d.d.ts",
       "import": "./lib/surfaces/canvas2d.js"
     },
+    "./react": {
+      "types": "./lib/react/index.d.ts",
+      "import": "./lib/react/index.js"
+    },
+    "./vue": {
+      "types": "./lib/vue/index.d.ts",
+      "import": "./lib/vue/index.js"
+    },
     "./features/*": {
       "types": "./lib/features/*.d.ts",
       "import": "./lib/features/*.js"
@@ -59,9 +69,10 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build": "tsdown && tsx scripts/build.ts",
+    "prepack": "tsdown",
     "dev": "tsdown --watch",
     "start": "npm run build && tsx scripts/serve.ts dist",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node --import tsx --test test/*.test.ts test/*.test.tsx",
     "plate": "tsx bin/naives.ts plate -o out/plate.svg",
     "face": "tsx bin/naives.ts face -o out/face.svg",
     "turn": "tsx bin/naives.ts turn -o out/turn.svg",
@@ -73,13 +84,31 @@
     "@eslint/js": "^10.0.0",
     "@eslint/markdown": "^8.0.3",
     "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "eslint": "^10.0.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.11.0",
     "jiti": "^2.7.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "tsdown": "^0.22.14",
     "tsx": "^4.23.12",
     "typescript": "^5.4.5",
-    "typescript-eslint": "^8.53.0"
+    "typescript-eslint": "^8.53.0",
+    "vue": "^3.5.42"
   },
-  "types": "./lib/index.d.ts"
+  "types": "./lib/index.d.ts",
+  "peerDependencies": {
+    "react": ">=18",
+    "vue": ">=3.3"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  }
 }
