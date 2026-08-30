@@ -91,14 +91,99 @@ mouth"* — which you can replace with `label`.
 The hooks and composables are there when you want the pieces rather than the
 component:
 
-| React                 | Vue                   | gives you                              |
-| --------------------- | --------------------- | -------------------------------------- |
-| `useFace(opts)`       | `useFace(opts)`       | `svg`, `genome`, `description`         |
-| `usePlate(opts)`      | `usePlate(opts)`      | `svg`, `faces`                         |
+| React                 | Vue                   | gives you                               |
+| --------------------- | --------------------- | --------------------------------------- |
+| `useFace(opts)`       | `useFace(opts)`       | `svg`, `genome`, `description`          |
+| `usePlate(opts)`      | `usePlate(opts)`      | `svg`, `faces`                          |
 | `useTurntable(opts)`  | `useTurntable(opts)`  | `yaw`, `pitch`, `bind` for drag-to-turn |
+| `useFaceFile(opts)`   | `useFaceFile(opts)`   | a face as a `File` — see below          |
+| `usePlateFile(opts)`  | `usePlateFile(opts)`  | a plate as a `File`                     |
+| `useFaceVideo(opts)`  | `useFaceVideo(opts)`  | a looping webm as a `File`              |
 
 The Vue composables take a ref, a getter or a plain object, so
 `useFace(() => ({ seed, yaw: yaw.value }))` recomputes on its own.
+
+## Files
+
+`useFaceFile` hands back a real `File`, which is what an upload, a `FormData`
+or a download link all want.
+
+```jsx
+const { create, download, url, pending, error } = useFaceFile({
+  seed: 'ada', format: 'webp', width: 512, pixelRatio: 2,
+})
+
+await download()                       // straight to the user's disk
+const file = await create({ format: 'png' })   // or keep it
+await fetch('/avatar', { method: 'POST', body: new FormData(...) })
+```
+
+| format | notes                                                            |
+| ------ | ---------------------------------------------------------------- |
+| `png`  | the default; keeps its transparency                              |
+| `jpeg` | no alpha, so it is given the face's own paper colour as a ground |
+| `webp` | smallest; `quality` applies                                      |
+| `svg`  | no canvas involved, so it works under SSR and stays vector       |
+
+`pixelRatio` multiplies the pixels without changing the layout size, so
+`width: 512, pixelRatio: 2` is a 1024px file drawn at full detail rather than
+an upscale. The result is named `naives-<seed>.<ext>` unless you pass
+`filename`.
+
+Outside a component, the same thing is `faceFile()` / `plateFile()` from
+`naives`.
+
+## Poses and animated webm
+
+A **pose** is an orientation as a function of time: it takes `t` from 0 to 1
+and returns degrees. Every built-in pose is *periodic*, so a clip rendered
+across one full cycle joins back onto itself with no seam.
+
+```js
+import { poses, POSE_NAMES, definePose } from 'naives'
+```
+
+| pose        | what it does                                        |
+| ----------- | --------------------------------------------------- |
+| `turntable` | a wide, unhurried look left and right (the default) |
+| `spin`      | all the way round, back of the head included        |
+| `nod`       | yes                                                 |
+| `shake`     | no, twice per loop                                  |
+| `sway`      | leaning into the turn, the way a head really moves  |
+| `tilt`      | curiosity, or a cocked ear                          |
+| `scan`      | a sweep that pauses at each end before starting back |
+| `peek`      | still, then a quick glance over the shoulder        |
+| `wobble`    | a lazy figure-eight                                 |
+| `idle`      | barely moving — alive, but not demanding attention  |
+
+Custom poses are a function, or keyframes that wrap round for you:
+
+```js
+definePose((t) => ({ yaw: 40 * Math.sin(t * Math.PI * 2), roll: 6 }))
+definePose([{ at: 0, yaw: -30 }, { at: 0.4, yaw: 30, pitch: 10 }])
+```
+
+Keep it periodic — value at `t = 1` equal to `t = 0` — and the loop is
+seamless. Keyframes get that for free, because the last one eases back into
+the first.
+
+```jsx
+const { create, download, progress, pending, supported } = useFaceVideo({
+  seed: 'ada', pose: 'sway', duration: 10, fps: 24, width: 420,
+})
+
+{supported && <button onClick={() => download()} disabled={pending}>
+  {pending ? `recording ${Math.round(progress * 100)}%` : 'save webm'}
+</button>}
+```
+
+Recording goes through `MediaRecorder`, which stamps frames off the wall
+clock — **a ten second clip takes ten seconds to record**. That is why there is
+a `progress` value and a `cancel()`. `supported` is false where the browser has
+no webm recorder; check it before offering the button.
+
+Poses are wired into the playground too: pick one on the *3D head* tab and hit
+**WEBM**.
 
 ## The playground
 

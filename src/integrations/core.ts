@@ -53,6 +53,12 @@ export interface FaceOptions {
   focal?: number
   /** Draw the invisible head over the drawing. */
   rig?: boolean
+  /**
+   * Backing-store pixels per CSS pixel. Defaults to the display's, capped at
+   * 2; set it explicitly when you want an exact pixel count, as a file export
+   * does.
+   */
+  pixelRatio?: number
 }
 
 export interface PlateOptions {
@@ -70,6 +76,8 @@ export interface PlateOptions {
   background?: string | null
   paper?: boolean | number
   rough?: number
+  /** See `FaceOptions.pixelRatio`. */
+  pixelRatio?: number
 }
 
 export interface FaceResult {
@@ -132,7 +140,7 @@ export function plateSVG(o: PlateOptions = {}): PlateSVGResult {
 export function drawFaceOnCanvas(canvas: HTMLCanvasElement | OffscreenCanvas,
   o: FaceOptions = {}): FaceResult | null {
   const { width, height, scale } = faceSize(o)
-  const ctx = fitCanvas(canvas, width, height)
+  const ctx = fitCanvas(canvas, width, height, o.pixelRatio)
   if (!ctx) return null
   const surface = new Canvas2DSurface(ctx, width, height)
   if (o.background) surface.background(o.background)
@@ -146,7 +154,7 @@ export function drawFaceOnCanvas(canvas: HTMLCanvasElement | OffscreenCanvas,
 export function drawPlateOnCanvas(canvas: HTMLCanvasElement | OffscreenCanvas,
   o: PlateOptions = {}): PlateCell[] {
   const { width, height } = plateSize(o)
-  const ctx = fitCanvas(canvas, width, height)
+  const ctx = fitCanvas(canvas, width, height, o.pixelRatio)
   if (!ctx) return []
   const surface = new Canvas2DSurface(ctx, width, height)
   if (o.background) surface.background(o.background)
@@ -229,8 +237,9 @@ function paintPlate(surface: SVGSurface | Canvas2DSurface, o: PlateOptions): Pla
  * in CSS pixels.
  */
 function fitCanvas(canvas: HTMLCanvasElement | OffscreenCanvas,
-  width: number, height: number): Ctx2D | null {
-  const dpr = typeof window === 'undefined' ? 1 : Math.min(2, window.devicePixelRatio || 1)
+  width: number, height: number, pixelRatio?: number): Ctx2D | null {
+  const dpr = pixelRatio
+    ?? (typeof window === 'undefined' ? 1 : Math.min(2, window.devicePixelRatio || 1))
   canvas.width = Math.round(width * dpr)
   canvas.height = Math.round(height * dpr)
   if ('style' in canvas) {

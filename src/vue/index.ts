@@ -8,21 +8,29 @@
  * `vue` is a peer dependency: nothing here is pulled into the core library.
  */
 
-import { computed, defineComponent, h, onMounted, ref, shallowRef, toValue, watch } from 'vue'
+import {
+  computed, defineComponent, h, onMounted, onScopeDispose, ref, shallowRef, toValue, watch,
+} from 'vue'
 
 import {
   drawFaceOnCanvas, drawPlateOnCanvas, faceSVG, faceSize, pickFace,
   plateSVG, plateSize,
 } from '../integrations/core'
+import { canRecordVideo, faceFile, faceVideoFile, plateFile } from '../integrations/export'
 import { describe } from '../genome'
 
 import type { ComputedRef, MaybeRefOrGetter, PropType, Ref } from 'vue'
 import type { FaceOptions, PlateOptions } from '../integrations/core'
 import type { Genome, Overrides } from '../types'
+import type { ImageFileOptions, PlateFileOptions, VideoFileOptions } from '../integrations/export'
 import type { PlateCell } from '../plate'
 import type { Seed } from '../rng'
 
 export type { FaceOptions, PlateOptions } from '../integrations/core'
+export type { ImageFileOptions, PlateFileOptions, VideoFileOptions, ImageFormat } from '../integrations/export'
+export type { Keyframe, Orientation, Pose, PoseName } from '../poses'
+export { poses, POSE_NAMES, definePose, resolvePose, poseAt } from '../poses'
+export { canRecordVideo, pickVideoMime } from '../integrations/export'
 
 // -------------------------------------------------------------- composables
 
@@ -117,6 +125,183 @@ export function useTurntable(options: TurntableOptions = {}): Turntable {
       onPointercancel: end,
       style: { cursor: dragging.value ? 'grabbing' : 'grab', touchAction: 'none' },
     })),
+  }
+}
+
+// ------------------------------------------------------------- file export
+
+export interface FileState<O> {
+  /** Build the file. Pass overrides to tweak this one call. */
+  create: (overrides?: Partial<O>) => Promise<File>
+  /** Build it and hand it straight to the browser as a download. */
+  download: (overrides?: Partial<O>) => Promise<File>
+  /** The most recent result, and an object URL for previewing it. */
+  file: Ref<File | null>
+  url: Ref<string | null>
+  pending: Ref<boolean>
+  error: Ref<Error | null>
+  reset: () => void
+}
+
+/**
+ * Keeps the newest file, and exactly one object URL for it.
+ *
+ * Object URLs are a leak if you forget them, so this owns the lifecycle: the
+ * previous one is revoked whenever a new file lands, and the last one when the
+ * scope goes away.
+ */
+function useFileSlot() {
+  const file = shallowRef<File | null>(null)
+  const url = ref<string | null>(null)
+  const pending = ref(false)
+  const error = shallowRef<Error | null>(null)
+
+  const put = (next: File | null) => {
+    if (url.value) URL.revokeObjectURL(url.value)
+    file.value = next
+    url.value = next ? URL.createObjectURL(next) : null
+  }
+  onScopeDispose(() => {
+    if (url.value) URL.revokeObjectURL(url.value)
+  })
+
+  return {
+    file,
+    url,
+    pending,
+    error,
+    reset: () => {
+      put(null); error.value = null
+    },
+    async run(make: () => Promise<File>): Promise<File> {
+      pending.value = true
+      error.value = null
+      try {
+        const next = await make()
+        put(next)
+
+        return next
+      } catch (e) {
+        error.value = e instanceof Error ? e : new Error(String(e))
+        throw error.value
+      } finally {
+        pending.value = false
+      }
+    },
+  }
+}
+
+/** Click a link on the user's behalf. */
+function saveFile(file: File): void {
+  const href = URL.createObjectURL(file)
+  const a = document.createElement('a')
+  a.href = href
+  a.download = file.name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(href), 1000)
+}
+
+/**
+ * A face as a downloadable `File` -- png, jpeg, webp or svg.
+ *
+ *   const { download, url, pending } = useFaceFile(() => ({ seed, format: 'webp' }))
+ */
+export function useFaceFile(
+  options: MaybeRefOrGetter<ImageFileOptions> = {},
+): FileState<ImageFileOptions> {
+  const slot = useFileSlot()
+  const create = (overrides: Partial<ImageFileOptions> = {}) =>
+    slot.run(() => faceFile({ ...toValue(options), ...overrides }))
+
+  return {
+    ...slot,
+    create,
+    download: async (overrides) => {
+      const f = await create(overrides ?? {})
+      saveFile(f)
+
+      return f
+    },
+  }
+}
+
+/** A whole plate as a downloadable `File`. */
+export function usePlateFile(
+  options: MaybeRefOrGetter<PlateFileOptions> = {},
+): FileState<PlateFileOptions> {
+  const slot = useFileSlot()
+  const create = (overrides: Partial<PlateFileOptions> = {}) =>
+    slot.run(() => plateFile({ ...toValue(options), ...overrides }))
+
+  return {
+    ...slot,
+    create,
+    download: async (overrides) => {
+      const f = await create(overrides ?? {})
+      saveFile(f)
+
+      return f
+    },
+  }
+}
+
+export interface VideoState extends FileState<VideoFileOptions> {
+  /** 0 -> 1 while recording. Recording runs in real time. */
+  progress: Ref<number>
+  /** Stop early. The clip so far is discarded. */
+  cancel: () => void
+  /** False when the browser has no webm recorder. */
+  supported: boolean
+}
+
+/**
+ * A looping webm of the face moving through a pose.
+ *
+ *   const { create, progress, supported } = useFaceVideo(() => ({ seed, pose: 'nod' }))
+ *
+ * Recording is real time, so a ten second clip takes ten seconds; `progress`
+ * and `pending` are there to say so.
+ */
+export function useFaceVideo(
+  options: MaybeRefOrGetter<VideoFileOptions> = {},
+): VideoState {
+  const slot = useFileSlot()
+  const progress = ref(0)
+  const supported = canRecordVideo()
+  let abort: AbortController | null = null
+
+  onScopeDispose(() => abort?.abort())
+
+  const create = (overrides: Partial<VideoFileOptions> = {}) => {
+    abort?.abort()
+    const controller = new AbortController()
+    abort = controller
+    progress.value = 0
+    const base = toValue(options)
+
+    return slot.run(() => faceVideoFile({
+      ...base,
+      ...overrides,
+      signal: controller.signal,
+      onProgress: (p) => {
+        progress.value = p
+        base.onProgress?.(p)
+      },
+    }))
+  }
+
+  return {
+    ...slot,
+    create,
+    download: async (overrides) => {
+      const f = await create(overrides ?? {})
+      saveFile(f)
+
+      return f
+    },
+    progress,
+    supported,
+    cancel: () => abort?.abort(),
   }
 }
 
@@ -323,5 +508,6 @@ export const Plate = defineComponent({
   },
 })
 
-/** Convenience helper: the same SVG string the component would render. */
+/** Convenience helpers: the same output the components and composables produce. */
 export { faceSVG, plateSVG, pickFace, pointerToCanvas } from '../integrations/core'
+export { faceFile, plateFile, faceVideoFile } from '../integrations/export'

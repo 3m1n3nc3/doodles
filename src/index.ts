@@ -29,6 +29,15 @@ export { renderFace, renderFace as face } from './face'
 export { renderPlate, renderPlate as plate } from './plate'
 export * as shapes from './shapes'
 export { drawRig } from './rig'
+export { poses, POSE_NAMES, definePose, resolvePose, poseAt } from './poses'
+
+/** Framework-free helpers -- the same ones naives/react and naives/vue wrap. */
+export {
+  faceSVG, plateSVG, drawFaceOnCanvas, drawPlateOnCanvas, pickFace, pointerToCanvas,
+} from './integrations/core'
+export {
+  faceFile, plateFile, faceVideoFile, canRecordVideo, pickVideoMime,
+} from './integrations/export'
 
 export { eyes, EYE_WEIGHTS } from './features/eyes'
 export { noses, NOSE_WEIGHTS } from './features/nose'
@@ -41,6 +50,11 @@ export { marks, MARK_WEIGHTS } from './features/marks'
 export { backdrops, BACKDROP_WEIGHTS } from './features/backdrop'
 
 export type * from './types'
+export type { Keyframe, Orientation, Pose, PoseName } from './poses'
+export type { FaceOptions, PlateOptions } from './integrations/core'
+export type {
+  ImageFileOptions, ImageFormat, PlateFileOptions, VideoFileOptions,
+} from './integrations/export'
 export type { Seed } from './rng'
 export type { PenOptions } from './pen'
 export type { SVGSurfaceOptions } from './surfaces/svg'

@@ -14,14 +14,20 @@ import {
   drawFaceOnCanvas, drawPlateOnCanvas, faceSVG, faceSize, pickFace,
   plateSVG, plateSize,
 } from '../integrations/core'
+import { canRecordVideo, faceFile, faceVideoFile, plateFile } from '../integrations/export'
 import { describe } from '../genome'
 
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import type { FaceOptions, PlateOptions } from '../integrations/core'
 import type { Genome } from '../types'
+import type { ImageFileOptions, PlateFileOptions, VideoFileOptions } from '../integrations/export'
 import type { PlateCell } from '../plate'
 
 export type { FaceOptions, PlateOptions } from '../integrations/core'
+export type { ImageFileOptions, PlateFileOptions, VideoFileOptions, ImageFormat } from '../integrations/export'
+export type { Keyframe, Orientation, Pose, PoseName } from '../poses'
+export { poses, POSE_NAMES, definePose, resolvePose, poseAt } from '../poses'
+export { canRecordVideo, pickVideoMime } from '../integrations/export'
 
 /**
  * Options are a fresh object on every render, so memos key on their *content*
@@ -287,6 +293,197 @@ export function Plate(props: PlateProps): ReactElement {
   )
 }
 
+// ------------------------------------------------------------- file export
+
+export interface FileState<O> {
+  /** Build the file. Pass overrides to tweak this one call. */
+  create: (overrides?: Partial<O>) => Promise<File>
+  /** Build it and hand it straight to the browser as a download. */
+  download: (overrides?: Partial<O>) => Promise<File>
+  /** The most recent result, and an object URL for previewing it. */
+  file: File | null
+  url: string | null
+  pending: boolean
+  error: Error | null
+  reset: () => void
+}
+
+/**
+ * Keeps the newest file, and exactly one object URL for it.
+ *
+ * Object URLs are a leak if you forget them, so this owns the lifecycle:
+ * the previous one is revoked whenever a new file lands, and the last one is
+ * revoked on unmount.
+ */
+function useFileSlot(): {
+  file: File | null
+  url: string | null
+  pending: boolean
+  error: Error | null
+  reset: () => void
+  run: (make: () => Promise<File>) => Promise<File>
+} {
+  const [file, setFile] = useState<File | null>(null)
+  const [url, setUrl] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const current = useRef<string | null>(null)
+
+  const put = useCallback((next: File | null) => {
+    if (current.current) URL.revokeObjectURL(current.current)
+    current.current = next ? URL.createObjectURL(next) : null
+    setFile(next)
+    setUrl(current.current)
+  }, [])
+
+  useEffect(() => () => {
+    if (current.current) URL.revokeObjectURL(current.current)
+    current.current = null
+  }, [])
+
+  const run = useCallback(async (make: () => Promise<File>) => {
+    setPending(true)
+    setError(null)
+    try {
+      const next = await make()
+      put(next)
+
+      return next
+    } catch (e) {
+      const err = e instanceof Error ? e : new Error(String(e))
+      setError(err)
+      throw err
+    } finally {
+      setPending(false)
+    }
+  }, [put])
+
+  const reset = useCallback(() => {
+    put(null); setError(null)
+  }, [put])
+
+  return { file, url, pending, error, reset, run }
+}
+
+/** Click a link on the user's behalf. */
+function saveFile(file: File): void {
+  const href = URL.createObjectURL(file)
+  const a = document.createElement('a')
+  a.href = href
+  a.download = file.name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(href), 1000)
+}
+
+/**
+ * A face as a downloadable `File` -- png, jpeg, webp or svg.
+ *
+ *   const { create, download, url, pending } = useFaceFile({ seed, format: 'webp' })
+ *   <button onClick={() => download()}>save</button>
+ */
+export function useFaceFile(options: ImageFileOptions = {}): FileState<ImageFileOptions> {
+  const slot = useFileSlot()
+  const latest = useRef(options)
+  latest.current = options
+
+  const create = useCallback((overrides: Partial<ImageFileOptions> = {}) =>
+    slot.run(() => faceFile({ ...latest.current, ...overrides })), [slot])
+
+  const download = useCallback(async (overrides: Partial<ImageFileOptions> = {}) => {
+    const f = await create(overrides)
+    saveFile(f)
+
+    return f
+  }, [create])
+
+  return {
+    create, download, file: slot.file, url: slot.url,
+    pending: slot.pending, error: slot.error, reset: slot.reset,
+  }
+}
+
+/** A whole plate as a downloadable `File`. */
+export function usePlateFile(options: PlateFileOptions = {}): FileState<PlateFileOptions> {
+  const slot = useFileSlot()
+  const latest = useRef(options)
+  latest.current = options
+
+  const create = useCallback((overrides: Partial<PlateFileOptions> = {}) =>
+    slot.run(() => plateFile({ ...latest.current, ...overrides })), [slot])
+
+  const download = useCallback(async (overrides: Partial<PlateFileOptions> = {}) => {
+    const f = await create(overrides)
+    saveFile(f)
+
+    return f
+  }, [create])
+
+  return {
+    create, download, file: slot.file, url: slot.url,
+    pending: slot.pending, error: slot.error, reset: slot.reset,
+  }
+}
+
+export interface VideoState extends FileState<VideoFileOptions> {
+  /** 0 -> 1 while recording. Recording runs in real time. */
+  progress: number
+  /** Stop early. The clip so far is discarded. */
+  cancel: () => void
+  /** False when the browser has no webm recorder. */
+  supported: boolean
+}
+
+/**
+ * A looping webm of the face moving through a pose.
+ *
+ *   const { create, progress, supported } = useFaceVideo({ seed, pose: 'nod', duration: 10 })
+ *
+ * Recording is real time, so a ten second clip takes ten seconds; `progress`
+ * and `pending` are there to say so.
+ */
+export function useFaceVideo(options: VideoFileOptions = {}): VideoState {
+  const slot = useFileSlot()
+  const [progress, setProgress] = useState(0)
+  const [supported] = useState(() => canRecordVideo())
+  const abort = useRef<AbortController | null>(null)
+  const latest = useRef(options)
+  latest.current = options
+
+  useEffect(() => () => abort.current?.abort(), [])
+
+  const create = useCallback((overrides: Partial<VideoFileOptions> = {}) => {
+    abort.current?.abort()
+    const controller = new AbortController()
+    abort.current = controller
+    setProgress(0)
+
+    return slot.run(() => faceVideoFile({
+      ...latest.current,
+      ...overrides,
+      signal: controller.signal,
+      onProgress: (p) => {
+        setProgress(p)
+        latest.current.onProgress?.(p)
+      },
+    }))
+  }, [slot])
+
+  const download = useCallback(async (overrides: Partial<VideoFileOptions> = {}) => {
+    const f = await create(overrides)
+    saveFile(f)
+
+    return f
+  }, [create])
+
+  const cancel = useCallback(() => abort.current?.abort(), [])
+
+  return {
+    create, download, cancel, progress, supported,
+    file: slot.file, url: slot.url,
+    pending: slot.pending, error: slot.error, reset: slot.reset,
+  }
+}
+
 /** Hand a value back to the parent after paint, never during render. */
 function useReport<T>(fn: ((v: T) => void) | undefined, value: T | null): void {
   const latest = useRef(fn)
@@ -296,5 +493,6 @@ function useReport<T>(fn: ((v: T) => void) | undefined, value: T | null): void {
   }, [value])
 }
 
-/** Convenience helper: the same SVG string the component would render. */
+/** Convenience helpers: the same output the components and hooks produce. */
 export { faceSVG, plateSVG, pickFace, pointerToCanvas } from '../integrations/core'
+export { faceFile, plateFile, faceVideoFile } from '../integrations/export'

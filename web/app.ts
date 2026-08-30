@@ -8,13 +8,18 @@
 
 import {
   Canvas2DSurface,
+  POSE_NAMES,
   Rng,
   SVGSurface,
+  canRecordVideo,
   describe,
   drawRig,
+  faceVideoFile,
   makeGenome,
+  poseAt,
   renderFace,
   renderPlate,
+  resolvePose,
 } from '../src/index'
 import { brows, ears, mouths } from '../src/features/mouth'
 
@@ -25,9 +30,11 @@ import { hair } from '../src/features/hair'
 import { hats } from '../src/features/hats'
 import { noses } from '../src/features/nose'
 
-import type { Overrides, PlateCell } from '../src/index'
+import type { Orientation, Overrides, PlateCell } from '../src/index'
 
 type Tab = 'plate' | 'head' | 'turn'
+
+const RAD = Math.PI / 180
 
 /** The one element lookup, narrowed at each call site by the caller. */
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
@@ -47,8 +54,13 @@ interface State {
   yaw: number
   pitch: number
   roll: number
-  spin: boolean
   rig: boolean
+  /** '' means the head holds still; otherwise a pose name. */
+  pose: string
+  /** Seconds for one full loop of the pose. */
+  seconds: number
+  /** Where in that loop we are, 0 -> 1. */
+  t: number
   frames: number
   sweep: number
   /** feature category -> variant name ('' = let the seed decide) */
@@ -62,7 +74,8 @@ const state: State = {
   tab: 'plate',
   seed: 'naives',
   cols: 6, rows: 8, turn: 0, tilt: 0, paper: true,
-  yaw: 0, pitch: 0, roll: 0, spin: false, rig: false,
+  yaw: 0, pitch: 0, roll: 0, rig: false,
+  pose: '', seconds: 10, t: 0,
   frames: 10, sweep: 160,
   pinned: {},
   plateFaces: [],
@@ -139,6 +152,13 @@ function traits(): Overrides {
   return t
 }
 
+/** The sliders, with the current pose laid over them. */
+function orientation(): Orientation {
+  const base = { yaw: state.yaw, pitch: state.pitch, roll: state.roll }
+
+  return state.pose ? poseAt(resolvePose(state.pose), state.t, base) : { ...base }
+}
+
 // ------------------------------------------------------------------ draw
 
 function draw(): void {
@@ -185,14 +205,15 @@ function draw(): void {
   }
 
   // Single head.
+  const o = orientation()
   const res = renderFace(surface, {
     seed: state.seed,
     traits: traits(),
     cx: size.w / 2, cy: size.h / 2,
     scale: Math.min(size.w, size.h) * 0.3,
-    yaw: (state.yaw * Math.PI) / 180,
-    pitch: (state.pitch * Math.PI) / 180,
-    roll: (state.roll * Math.PI) / 180,
+    yaw: o.yaw * RAD,
+    pitch: o.pitch * RAD,
+    roll: o.roll * RAD,
   })
   if (state.rig) drawRig(surface, res.head, res.genome)
   if (state.paper) surface.paperTexture({ opacity: 0.045, rng: () => rng.next() })
@@ -246,13 +267,14 @@ function exportSVG(): void {
       })
     }
   } else {
+    const o = orientation()
     renderFace(s, {
       seed: state.seed, traits: traits(),
       cx: (size.w * scale) / 2, cy: (size.h * scale) / 2,
       scale: Math.min(size.w, size.h) * scale * 0.3,
-      yaw: (state.yaw * Math.PI) / 180,
-      pitch: (state.pitch * Math.PI) / 180,
-      roll: (state.roll * Math.PI) / 180,
+      yaw: o.yaw * RAD,
+      pitch: o.pitch * RAD,
+      roll: o.roll * RAD,
     })
   }
   download(new Blob([s.toString()], { type: 'image/svg+xml' }), `naives-${state.tab}-${state.seed}.svg`)
@@ -287,6 +309,52 @@ type RangeKey = {
   [K in keyof State]: State[K] extends number ? K : never
 }[keyof State]
 
+/** A short line under the export buttons: progress, or what just happened. */
+function hint(message: string): void {
+  const el = $('exportHint')
+  el.textContent = message
+  el.hidden = !message
+}
+
+function buildPosePicker(): void {
+  const sel = $<HTMLSelectElement>('pose')
+  sel.innerHTML = '<option value="">— hold still —</option>'
+    + POSE_NAMES.map((k) => `<option>${k}</option>`).join('')
+  sel.addEventListener('change', () => {
+    state.pose = sel.value
+    state.t = 0
+    draw()
+  })
+}
+
+async function exportWEBM(): Promise<void> {
+  const button = $<HTMLButtonElement>('webm')
+  if (!canRecordVideo()) {
+    hint('this browser has no webm recorder')
+
+    return
+  }
+  button.disabled = true
+  try {
+    const file = await faceVideoFile({
+      seed: state.seed,
+      traits: traits(),
+      yaw: state.yaw, pitch: state.pitch, roll: state.roll,
+      pose: state.pose || 'turntable',
+      duration: state.seconds,
+      // Grain is a per-pixel loop, far too slow to run every frame.
+      width: 420, background: '#efe9dd', paper: false,
+      onProgress: (p) => hint(`recording… ${Math.round(p * 100)}%  (real time)`),
+    })
+    download(file, file.name)
+    hint(`saved ${file.name} · ${(file.size / 1024).toFixed(0)} kB`)
+  } catch (e) {
+    hint(e instanceof Error ? e.message : String(e))
+  } finally {
+    button.disabled = false
+  }
+}
+
 function bindRange(id: string, key: RangeKey, fmt: (v: string) => string = (v) => v): void {
   const el = $<HTMLInputElement>(id)
   const out = $(`${id}Out`)
@@ -305,8 +373,8 @@ function showTab(tab: Tab): void {
   for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) {
     b.setAttribute('aria-selected', String(b.dataset.tab === tab))
   }
-  for (const fs of document.querySelectorAll<HTMLElement>('fieldset[data-for]')) {
-    fs.hidden = !fs.dataset.for!.split(' ').includes(tab)
+  for (const el of document.querySelectorAll<HTMLElement>('[data-for]')) {
+    el.hidden = !el.dataset.for!.split(' ').includes(tab)
   }
   draw()
   // On a phone the canvas sits below the controls, so a tab change would
@@ -328,11 +396,9 @@ $('reroll').addEventListener('click', () => {
 })
 $('png').addEventListener('click', exportPNG)
 $('svg').addEventListener('click', exportSVG)
+$('webm').addEventListener('click', () => void exportWEBM())
 $('paper').addEventListener('change', (e) => {
   state.paper = (e.currentTarget as HTMLInputElement).checked; draw()
-})
-$('spin').addEventListener('change', (e) => {
-  state.spin = (e.currentTarget as HTMLInputElement).checked
 })
 $('rig').addEventListener('change', (e) => {
   state.rig = (e.currentTarget as HTMLInputElement).checked; draw()
@@ -351,7 +417,9 @@ bindRange('pitch', 'pitch', (v) => `${v}°`)
 bindRange('roll', 'roll', (v) => `${v}°`)
 bindRange('frames', 'frames')
 bindRange('sweep', 'sweep')
+bindRange('seconds', 'seconds')
 buildPickers()
+buildPosePicker()
 
 // ------------------------------------------------------- drag to rotate
 
@@ -409,19 +477,15 @@ stage.addEventListener('pointercancel', endDrag)
 
 // --------------------------------------------------------------- ticking
 
-let t0 = performance.now()
+let last = performance.now()
 function frame(now: number): void {
-  if (state.spin && state.tab === 'head') {
-    if (now - t0 > 70) {
-      t0 = now
-      state.yaw = Math.round(Math.sin(now / 2200) * 72)
-      state.pitch = Math.round(Math.sin(now / 3700) * 16)
-      $<HTMLInputElement>('yaw').value = String(state.yaw)
-      $<HTMLInputElement>('pitch').value = String(state.pitch)
-      $('yawOut').textContent = `${state.yaw}°`
-      $('pitchOut').textContent = `${state.pitch}°`
-      draw()
-    }
+  // The pose is the animation: walk `t` round the loop and redraw. The sliders
+  // are left alone, because the pose sits on top of them rather than fighting
+  // them for the same numbers.
+  if (state.pose && state.tab === 'head' && !drag && now - last > 40) {
+    last = now
+    state.t = ((now / 1000) / state.seconds) % 1
+    draw()
   }
   requestAnimationFrame(frame)
 }
