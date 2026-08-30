@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  build-and-package:
+  prepack:
     runs-on: ubuntu-latest
 
     steps:
